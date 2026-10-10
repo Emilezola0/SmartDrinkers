@@ -6,6 +6,7 @@
     <header class="topbar">
       <div class="brand" aria-label="SmartDrinkers"><span class="b1">Smart</span><span class="b2">Drinkers</span></div>
       <div class="top-actions">
+        <button class="icon-btn" data-act="shareApp" aria-label="${t("shareApp")}">${SD.icon("share")}</button>
         <button class="pill" data-act="lang" aria-label="${t("language")}">${SD.state.lang === "fr" ? "FR" : "EN"}</button>
         <button class="icon-btn" data-act="settings" aria-label="${t("settings")}">${SD.icon("gear")}</button>
       </div>
@@ -54,6 +55,7 @@
         <div class="quick">
           <button class="btn ghost xl" data-act="join">${SD.icon("qr")} ${t("join")}</button>
           <button class="btn ghost xl" data-act="free">${SD.icon("glass")} ${t("freeQuiz")}</button>
+          <button class="btn primary xl span2" data-act="shareApp">${SD.icon("share")} ${t("shareApp")}</button>
         </div>
         <p class="footnote">${t("moderation")}</p>
       </main>`, { cls: "homescreen" });
@@ -78,8 +80,39 @@
         g.start();
       },
       join: () => SD.joinScreen(),
-      free: freeQuiz
+      free: freeQuiz,
+      shareApp: () => SD.shareApp()
     });
+  };
+
+  /* ---------- Partager l'appli (QR code vers le site) ---------- */
+  const PUBLIC_URL = "https://emilezola0.github.io/SmartDrinkers/";
+  SD.appUrl = () => {
+    const local = !/^https:$/.test(location.protocol) || /^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname);
+    return local ? PUBLIC_URL : location.origin + location.pathname.replace(/index\.html$/, "");
+  };
+  SD.shareApp = () => {
+    const url = SD.appUrl();
+    const canShare = typeof navigator.share === "function";
+    SD.modal(t("shareApp"), `
+      <div class="share-app">
+        <div class="qr-box">${SD.qrSvg(url)}</div>
+        <p class="hint">${t("shareAppHelp")}</p>
+        <p class="mono app-url" id="appUrl">${esc(url)}</p>
+        <div class="row-btns">
+          <button class="btn ghost" data-share="copy">${t("copyLink")}</button>
+          ${canShare ? `<button class="btn primary" data-share="native">${SD.icon("share")} ${t("sendLink")}</button>` : ""}
+        </div>
+      </div>`);
+    const m = document.getElementById("modal");
+    if (!m) return;
+    const selectUrl = () => { const r = document.createRange(); r.selectNodeContents(m.querySelector("#appUrl")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
+    m.querySelector('[data-share="copy"]').addEventListener("click", e => {
+      const b = e.currentTarget;
+      try { navigator.clipboard.writeText(url).then(() => { b.textContent = t("copied"); }, selectUrl); } catch (err) { selectUrl(); }
+    });
+    const nat = m.querySelector('[data-share="native"]');
+    if (nat) nat.addEventListener("click", () => { navigator.share({ title: "SmartDrinkers", text: t("tagline"), url }).catch(() => {}); });
   };
 
   const freeQuiz = () => {
@@ -125,7 +158,7 @@
           <form class="join-form" id="urlForm"><input id="urlIn" type="url" placeholder="${t("urlPh")}" autocomplete="off"><button class="btn primary" type="submit">${t("load")}</button></form></div>
         ${SD.isCustomBank ? `<button class="btn ghost" data-act="reset">${t("resetBank")}</button>` : ""}
         <p class="hint">${t("qLangNote")}</p>
-        <p class="footnote">SmartDrinkers · v1.1</p>
+        <p class="footnote">SmartDrinkers · v1.2</p>
       </main>`, { cls: "settingscreen" });
 
     const useText = text => {

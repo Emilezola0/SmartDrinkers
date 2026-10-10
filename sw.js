@@ -1,6 +1,6 @@
 /* SmartDrinkers — service worker : l'appli marche hors connexion une fois ouverte.
    Change VERSION à chaque mise à jour pour que les téléphones récupèrent les nouveaux fichiers. */
-const VERSION = "sd-v1.1.0";
+const VERSION = "sd-v1.2.0";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/lib/qrcode.js", "js/lib/jsQR.js", "data/questions.js",
