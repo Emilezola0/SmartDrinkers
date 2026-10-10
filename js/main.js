@@ -48,14 +48,17 @@
         </section>
         <section class="block">
           <h2 class="section-title">${SD.icon("phones")} ${t("eachPhone")}</h2>
+          <div class="multi-row">
+            <button class="btn primary xl" data-act="create">${SD.icon("plus")} ${t("createGame")}</button>
+            <button class="btn ghost xl" data-act="join">${SD.icon("qr")} ${t("join")}</button>
+          </div>
           <div class="game-grid">${each.map(gameCard).join("")}</div>
           <p class="hint">${t("holdHint")}</p>
         </section>
 
         <div class="quick">
-          <button class="btn ghost xl" data-act="join">${SD.icon("qr")} ${t("join")}</button>
           <button class="btn ghost xl" data-act="free">${SD.icon("glass")} ${t("freeQuiz")}</button>
-          <button class="btn primary xl span2" data-act="shareApp">${SD.icon("share")} ${t("shareApp")}</button>
+          <button class="btn primary xl" data-act="shareApp">${SD.icon("share")} ${t("shareApp")}</button>
         </div>
         <p class="footnote">${t("moderation")}</p>
       </main>`, { cls: "homescreen" });
@@ -81,8 +84,25 @@
       },
       join: () => SD.joinScreen(),
       free: freeQuiz,
-      shareApp: () => SD.shareApp()
+      shareApp: () => SD.shareApp(),
+      create: () => SD.createChooser()
     });
+  };
+
+  /* ---------- Créer une partie « chacun son téléphone » ---------- */
+  SD.createChooser = () => {
+    const each = SD.GAMES.filter(g => g.mode === "each");
+    SD.modal(t("createGame"), `
+      <p class="hint">${t("createHelp")}</p>
+      <div class="choose-list">
+        ${each.map(g => `<button class="choose" data-g="${g.id}"><span class="gname">${t("g_" + g.id)}</span><span class="gdesc">${t("g_" + g.id + "_d")}</span></button>`).join("")}
+      </div>`);
+    const m = document.getElementById("modal");
+    if (!m) return;
+    m.querySelectorAll("[data-g]").forEach(b => b.addEventListener("click", () => {
+      SD.closeModal();
+      SD.GAMES.find(g => g.id === b.dataset.g).start();
+    }));
   };
 
   /* ---------- Partager l'appli (QR code vers le site) ---------- */
@@ -158,7 +178,7 @@
           <form class="join-form" id="urlForm"><input id="urlIn" type="url" placeholder="${t("urlPh")}" autocomplete="off"><button class="btn primary" type="submit">${t("load")}</button></form></div>
         ${SD.isCustomBank ? `<button class="btn ghost" data-act="reset">${t("resetBank")}</button>` : ""}
         <p class="hint">${t("qLangNote")}</p>
-        <p class="footnote">SmartDrinkers · v1.2</p>
+        <p class="footnote">SmartDrinkers · v1.3</p>
       </main>`, { cls: "settingscreen" });
 
     const useText = text => {
