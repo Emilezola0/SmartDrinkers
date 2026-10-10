@@ -117,36 +117,76 @@
 
   /* ================= La Bombe ================= */
   (function () {
-    let category;
-    const newCat = () => { const list = SD.BOMB[SD.state.lang] || SD.BOMB.fr; let c; do c = SD.pick(list); while (c === category && list.length > 1); category = c; };
-    const start = () => { newCat(); ready(); };
+    // mode : "letters" (mot qui commence par…), "exact" (… avec un nombre de lettres précis), "cat" (catégorie)
+    let mode = SD.load("bombMode", "letters"), prompt = null;
+    const newPrompt = () => {
+      const lang = SD.state.lang;
+      if (mode === "cat") {
+        const list = SD.BOMB[lang] || SD.BOMB.fr; let c;
+        do c = SD.pick(list); while (prompt && c === prompt.cat && list.length > 1);
+        prompt = { cat: c };
+      } else {
+        const P = SD.PREFIX[lang] || SD.PREFIX.fr;
+        const pool = mode === "exact" ? P.short : P.short.concat(P.long);
+        let l; do l = SD.pick(pool); while (prompt && l === prompt.letters && pool.length > 1);
+        prompt = { letters: l, len: mode === "exact" ? SD.pick([4, 5, 6]) : 0 };
+      }
+    };
+    const promptHtml = (big) => {
+      if (prompt.cat) return `<h1 class="display category">${esc(prompt.cat)}</h1>`;
+      const tiles = prompt.letters.split("").map(c => `<span class="tile">${esc(c)}</span>`).join("")
+        + (prompt.len ? `<span class="tile empty"></span>`.repeat(Math.max(0, prompt.len - prompt.letters.length)) : `<span class="tile more">…</span>`);
+      return `<div class="tiles ${big ? "big" : ""}" aria-label="${esc(prompt.letters)}">${tiles}</div>
+        <p class="prompt-sub">${prompt.len ? t("bombExact", { n: prompt.len }) : t("bombStarts")}</p>`;
+    };
+    const start = () => { newPrompt(); ready(); };
 
     const ready = () => {
+      const seg = [["letters", t("bombModeLetters")], ["exact", t("bombModeExact")], ["cat", t("bombModeCat")]];
       const app = SD.render(`
         ${SD.gameTop("bomb")}
         <div class="game-body">
+          <div class="seg" role="group">${seg.map(([v, l]) => `<button class="${v === mode ? "on" : ""}" data-act="mode" data-v="${v}" aria-pressed="${v === mode}">${l}</button>`).join("")}</div>
           <p class="eyebrow">${t("holder")} <strong>${esc(SD.current())}</strong></p>
-          <h1 class="display category">${esc(category)}</h1>
-          <button class="btn link" data-act="cat">${t("newCategory")}</button>
+          ${promptHtml(true)}
+          <button class="btn link" data-act="again">${prompt.cat ? t("newCategory") : t("newLetters")}</button>
           <div class="bomb idle" aria-hidden="true"><span class="fuse"></span></div>
         </div>
         <div class="actions"><button class="btn primary xl wide" data-act="go">${t("lightFuse")}</button></div>`, { cls: "game", awake: true });
-      SD.bind(app, { ...SD.topHandlers("bomb"), cat: () => { newCat(); ready(); }, go: run });
+      SD.bind(app, {
+        ...SD.topHandlers("bomb"),
+        mode: (e, el) => { mode = el.dataset.v; SD.save("bombMode", mode); prompt = null; newPrompt(); ready(); },
+        again: () => { newPrompt(); ready(); },
+        go: run
+      });
     };
 
     const run = () => {
-      const total = 15000 + Math.random() * 30000;
+      const total = 20000 + Math.random() * 30000;
       const t0 = performance.now();
-      let tick = null, alive = true;
+      let tick = null, alive = true, refiler = null;
       const app = SD.render(`
-        <header class="game-top"><span></span><span class="eyebrow">${esc(category)}</span><span></span></header>
+        <header class="game-top"><span></span><span class="eyebrow">${t("g_bomb")}</span><span></span></header>
         <div class="game-body bomb-run">
+          <div id="prompt">${promptHtml(false)}</div>
           <p class="eyebrow">${t("holder")}</p>
           <h1 class="display huge" id="holder">${esc(SD.current())}</h1>
           <div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>
+          <div class="refile-box" id="refile" hidden>
+            <p class="lead" id="refileTxt"></p>
+            <div class="row-btns">
+              <button class="btn bad" data-act="rfNo">${t("refileNo")}</button>
+              <button class="btn good" data-act="rfYes">${t("refileYes")}</button>
+            </div>
+          </div>
         </div>
-        <button class="pass-zone" data-act="pass">${t("pass")}</button>`, { cls: "game", awake: true });
+        <div class="bomb-actions" id="bombBtns">
+          <button class="refile-zone" data-act="refile">${t("refile")}</button>
+          <button class="pass-zone" data-act="pass">${t("pass")}</button>
+        </div>`, { cls: "game", awake: true });
       const holderEl = app.querySelector("#holder"), bombEl = app.querySelector(".bomb");
+      const box = app.querySelector("#refile"), btns = app.querySelector("#bombBtns");
+      const pop = () => { holderEl.textContent = SD.current(); holderEl.classList.remove("pop"); void holderEl.offsetWidth; holderEl.classList.add("pop"); };
       const loop = () => {
         if (!alive) return;
         const p = (performance.now() - t0) / total;
@@ -155,19 +195,32 @@
         bombEl.classList.remove("tick"); void bombEl.offsetWidth; bombEl.classList.add("tick");
         tick = setTimeout(loop, Math.max(140, 900 - p * 760));
       };
-      const explode = () => {
-        alive = false;
-        const loser = SD.current();
-        SD.boomSound(); SD.buzz([400, 100, 400]);
+      const finish = (loser, title) => {
+        alive = false; clearTimeout(tick);
         const a = SD.render(`
           <div class="center-stack boom">
-            <h1 class="display mega">${t("boom")}</h1>
+            <h1 class="display mega">${title}</h1>
             <p class="lead"><strong>${esc(loser)}</strong></p>
             <button class="btn primary xl" data-act="quiz">${t("quizTime")}</button>
           </div>`, { cls: "game exploded", awake: true });
-        SD.bind(a, { quiz: () => { SD.nextTurn(); SD.runQuiz([loser], { onContinue: () => { newCat(); ready(); } }); } });
+        SD.bind(a, { quiz: () => { SD.state.turn = (SD.players().indexOf(loser) + 1) % SD.players().length; SD.runQuiz([loser], { onContinue: () => { newPrompt(); ready(); } }); } });
       };
-      SD.bind(app, { pass: () => { if (!alive) return; SD.nextTurn(); holderEl.textContent = SD.current(); SD.beep(500, .05); SD.buzz(15); holderEl.classList.remove("pop"); void holderEl.offsetWidth; holderEl.classList.add("pop"); } });
+      const explode = () => { SD.boomSound(); SD.buzz([400, 100, 400]); finish(SD.current(), t("boom")); };
+      SD.bind(app, {
+        pass: () => { if (!alive) return; SD.nextTurn(); pop(); SD.beep(500, .05); SD.buzz(15); },
+        refile: () => {
+          if (!alive) return;
+          refiler = SD.current(); SD.nextTurn(); pop(); SD.beep(380, .08);
+          app.querySelector("#refileTxt").innerHTML = t("refileAsk", { a: `<strong>${esc(refiler)}</strong>`, b: `<strong>${esc(SD.current())}</strong>` });
+          box.hidden = false; btns.hidden = true;
+        },
+        rfYes: () => { if (!alive) return; SD.bad(); finish(refiler, t("refiled")); },
+        rfNo: () => {
+          if (!alive) return;
+          refiler = null; box.hidden = true; btns.hidden = false;
+          newPrompt(); app.querySelector("#prompt").innerHTML = promptHtml(false); SD.beep(700, .06);
+        }
+      });
       SD.cleanup = () => { alive = false; clearTimeout(tick); };
       loop();
     };
@@ -237,5 +290,147 @@
     };
 
     SD.addGame({ id: "reflex", mode: "one", min: 2, start });
+  })();
+  /* ================= Memory ================= */
+  (function () {
+    const FACES = ["🍺", "🍷", "🍸", "🍹", "🥂", "🍾", "🥃", "🍋", "🍒", "🍕", "🎲", "🎯", "🎸", "🎉", "🌶️", "🧊"];
+    let cards, scores, order, cur, open, lock;
+    const start = () => {
+      const n = SD.players().length;
+      const pairs = n <= 4 ? 8 : 10;
+      const faces = SD.shuffle(FACES).slice(0, pairs);
+      cards = SD.shuffle(faces.concat(faces)).map(f => ({ f, up: false, done: false }));
+      order = SD.players().map((_, i) => SD.players()[(SD.state.turn + i) % n]);
+      scores = Object.fromEntries(order.map(p => [p, 0]));
+      cur = 0; open = []; lock = false;
+      draw();
+    };
+    const draw = () => {
+      const cols = cards.length === 16 ? 4 : 5;
+      const app = SD.render(`
+        ${SD.gameTop("memory")}
+        <div class="game-body mem-body">
+          <div class="scoreboard">${order.map((p, i) => `<span class="score ${i === cur ? "on" : ""}">${esc(p)} <b>${scores[p]}</b></span>`).join("")}</div>
+          <p class="turn">${t("turnOf")} <strong>${esc(order[cur])}</strong></p>
+          <div class="mem-grid" style="--cols:${cols}">
+            ${cards.map((c, i) => `<button class="mcard ${c.up || c.done ? "up" : ""} ${c.done ? "done" : ""}" data-i="${i}" aria-label="${c.up || c.done ? c.f : "?"}"><span class="mface">${c.up || c.done ? c.f : ""}</span></button>`).join("")}
+          </div>
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, SD.topHandlers("memory"));
+      app.querySelectorAll(".mcard").forEach(b => b.addEventListener("click", () => flip(+b.dataset.i)));
+    };
+    const flip = i => {
+      const c = cards[i];
+      if (lock || c.up || c.done) return;
+      c.up = true; open.push(i); SD.beep(600, .04); draw();
+      if (open.length < 2) return;
+      const [a, b] = open.map(k => cards[k]);
+      lock = true;
+      if (a.f === b.f) {
+        SD.later(() => {
+          a.done = b.done = true; a.up = b.up = false; open = []; lock = false;
+          scores[order[cur]]++; SD.good();
+          if (cards.every(x => x.done)) return end();
+          draw();
+        }, 500);
+      } else {
+        SD.later(() => { a.up = b.up = false; open = []; lock = false; cur = (cur + 1) % order.length; SD.beep(300, .06); draw(); }, 1000);
+      }
+    };
+    const end = () => {
+      const min = Math.min(...order.map(p => scores[p]));
+      const losers = order.filter(p => scores[p] === min);
+      SD.bad();
+      const app = SD.render(`
+        ${SD.gameTop("memory")}
+        <div class="center-stack">
+          <p class="eyebrow">${t("results")}</p>
+          <div class="result-list">${order.slice().sort((x, y) => scores[y] - scores[x]).map(p => `<div class="rrow ${losers.includes(p) ? "lose" : ""}"><span>${esc(p)}</span><b>${scores[p]}</b></div>`).join("")}</div>
+          <h1 class="display">${t("quizQueue", { names: losers.map(n => `<span class="hl">${esc(n)}</span>`).join(", ") })}</h1>
+          <button class="btn primary xl" data-act="quiz">${t("quizTime")}</button>
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, { ...SD.topHandlers("memory"), quiz: () => { SD.nextTurn(); SD.runQuiz(losers, { onContinue: start }); } });
+    };
+    SD.addGame({ id: "memory", mode: "one", min: 2, start });
+  })();
+
+  /* ================= Pioche ou Stop (inspiré de Flip 7) ================= */
+  (function () {
+    const newDeck = () => { const d = [0]; for (let v = 1; v <= 12; v++) for (let k = 0; k < v; k++) d.push(v); return SD.shuffle(d); };
+    let deck, order, idx, hands, state;
+    const drawCard = () => { if (!deck.length) deck = newDeck(); return deck.pop(); };
+    const sum = h => h.reduce((a, b) => a + b, 0);
+    const start = () => {
+      const n = SD.players().length;
+      deck = newDeck();
+      order = SD.players().map((_, i) => SD.players()[(SD.state.turn + i) % n]);
+      hands = {}; state = {}; idx = 0;
+      handoff();
+    };
+    const handoff = () => {
+      const p = order[idx];
+      const app = SD.render(`
+        ${SD.gameTop("push")}
+        <div class="center-stack">
+          ${idx > 0 ? `<div class="result-list small">${order.slice(0, idx).map(q => `<div class="rrow ${state[q] === "bust" ? "lose" : ""}"><span>${esc(q)}</span><b>${state[q] === "bust" ? t("busted") : sum(hands[q])}</b></div>`).join("")}</div>` : ""}
+          <p class="eyebrow">${t("turnOf")}</p>
+          <h1 class="display huge">${esc(p)}</h1>
+          <button class="btn primary xl" data-act="go">${t("itsMe")}</button>
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, { ...SD.topHandlers("push"), go: () => { hands[p] = []; turn(); } });
+    };
+    const turn = (last, msg) => {
+      const p = order[idx], h = hands[p];
+      const best = Math.max(-1, ...order.slice(0, idx).filter(q => state[q] === "stop").map(q => sum(hands[q])));
+      const app = SD.render(`
+        ${SD.gameTop("push")}
+        <div class="game-body">
+          <p class="turn"><strong>${esc(p)}</strong></p>
+          <div class="push-total"><span class="label">${t("total")}</span><b class="tabnum">${sum(h)}</b>${best >= 0 ? `<span class="hint">${t("toBeat", { n: best })}</span>` : ""}</div>
+          <div class="push-hand">${h.map((v, i) => `<span class="ncard ${i === h.length - 1 && last != null ? "flip-in" : ""} ${msg === "bust" && v === last ? "bust" : ""}">${v}</span>`).join("") || `<span class="hint">${t("drawFirst")}</span>`}</div>
+          <p class="hint tabnum">${t("uniqueCount", { n: new Set(h).size })}</p>
+          <p class="verdict ${msg === "bust" ? "bad" : msg === "seven" ? "good" : ""}" aria-live="polite">${msg === "bust" ? t("bustMsg", { n: last }) : msg === "seven" ? t("sevenMsg") : "&nbsp;"}</p>
+        </div>
+        <div class="actions">
+          ${msg ? `<button class="btn primary xl wide" data-act="next">${t("next")}</button>`
+                : `<button class="btn ghost xl" data-act="stop" ${h.length ? "" : "disabled"}>${t("stop")}</button>
+                   <button class="btn primary xl" data-act="hit">${t("draw")}</button>`}
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, {
+        ...SD.topHandlers("push"),
+        hit: () => {
+          const v = drawCard();
+          if (h.includes(v)) { h.push(v); state[p] = "bust"; SD.bad(); return turn(v, "bust"); }
+          h.push(v); SD.beep(500 + v * 30, .05);
+          if (new Set(h).size >= 7) { state[p] = "seven"; SD.good(); return turn(v, "seven"); }
+          turn(v);
+        },
+        stop: () => { state[p] = "stop"; SD.beep(700, .06); after(); },
+        next: () => after()
+      });
+    };
+    const after = () => {
+      const p = order[idx];
+      if (state[p] === "seven") return end(order.filter(q => q !== p), p);
+      idx++;
+      if (idx < order.length) return handoff();
+      const busted = order.filter(q => state[q] === "bust");
+      let losers = busted;
+      if (!busted.length) { const min = Math.min(...order.map(q => sum(hands[q]))); losers = order.filter(q => sum(hands[q]) === min); }
+      end(losers, null);
+    };
+    const end = (losers, sevenBy) => {
+      SD.bad();
+      const app = SD.render(`
+        ${SD.gameTop("push")}
+        <div class="center-stack">
+          ${sevenBy ? `<p class="eyebrow">${t("sevenBy", { name: esc(sevenBy) })}</p>` : `<p class="eyebrow">${t("results")}</p>
+          <div class="result-list">${order.slice().sort((x, y) => (state[x] === "bust") - (state[y] === "bust") || sum(hands[y]) - sum(hands[x])).map(q => `<div class="rrow ${losers.includes(q) ? "lose" : ""}"><span>${esc(q)}</span><b>${state[q] === "bust" ? t("busted") : sum(hands[q])}</b></div>`).join("")}</div>`}
+          <h1 class="display">${t("quizQueue", { names: losers.map(n => `<span class="hl">${esc(n)}</span>`).join(", ") })}</h1>
+          <button class="btn primary xl" data-act="quiz">${t("quizTime")}</button>
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, { ...SD.topHandlers("push"), quiz: () => { SD.nextTurn(); SD.runQuiz(losers, { onContinue: start }); } });
+    };
+    SD.addGame({ id: "push", mode: "one", min: 2, start });
   })();
 })();
