@@ -238,6 +238,7 @@ button.pchip { padding: .5em 1em; }
 .result-list.small { max-width: 280px; font-size: .9rem; }
 .rrow { display: flex; justify-content: space-between; background: var(--surface); border-radius: var(--r-sm); padding: 10px 14px; font-weight: 800; }
 .rrow b { font-variant-numeric: tabular-nums; }
+.rrow small { color: var(--muted); font-weight: 700; margin-left: 6px; }
 .rrow.lose { color: var(--bad); }
 .push-total { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .push-total b { font: 400 3.6rem/1 var(--f-display); color: var(--accent); }

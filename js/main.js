@@ -178,7 +178,7 @@
           <form class="join-form" id="urlForm"><input id="urlIn" type="url" placeholder="${t("urlPh")}" autocomplete="off"><button class="btn primary" type="submit">${t("load")}</button></form></div>
         ${SD.isCustomBank ? `<button class="btn ghost" data-act="reset">${t("resetBank")}</button>` : ""}
         <p class="hint">${t("qLangNote")}</p>
-        <p class="footnote">SmartDrinkers · v1.4</p>
+        <p class="footnote">SmartDrinkers · v1.5</p>
       </main>`, { cls: "settingscreen" });
 
     const useText = text => {

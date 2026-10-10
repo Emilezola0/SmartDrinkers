@@ -356,23 +356,54 @@
 
   /* ================= Pioche ou Stop (inspiré de Flip 7) ================= */
   (function () {
+    const BONUS = 15;
     const newDeck = () => { const d = [0]; for (let v = 1; v <= 12; v++) for (let k = 0; k < v; k++) d.push(v); return SD.shuffle(d); };
-    let deck, order, idx, hands, state;
+    let rounds = SD.load("pushRounds", 3);
+    let deck, players, round, order, idx, hands, state, totals;
     const drawCard = () => { if (!deck.length) deck = newDeck(); return deck.pop(); };
     const sum = h => h.reduce((a, b) => a + b, 0);
+    const roundScore = q => state[q] === "bust" || !hands[q] ? 0 : sum(hands[q]) + (state[q] === "seven" ? BONUS : 0);
+
     const start = () => {
+      const app = SD.render(`
+        ${SD.gameTop("push")}
+        <div class="game-body">
+          <h1 class="display">${t("g_push")}</h1>
+          <p class="lead">${t("g_push_d")}</p>
+          <div class="field"><span class="label">${t("nbRounds")}</span>
+            <div class="seg" role="group">${[1, 3, 5].map(v => `<button class="${v === rounds ? "on" : ""}" data-act="r" data-v="${v}" aria-pressed="${v === rounds}">${v}</button>`).join("")}</div></div>
+        </div>
+        <div class="actions"><button class="btn primary xl wide" data-act="go">${t("start")}</button></div>`, { cls: "game" });
+      SD.bind(app, {
+        ...SD.topHandlers("push"),
+        r: (e, el) => { rounds = +el.dataset.v; SD.save("pushRounds", rounds); start(); },
+        go: newMatch
+      });
+    };
+    const newMatch = () => {
       const n = SD.players().length;
-      deck = newDeck();
-      order = SD.players().map((_, i) => SD.players()[(SD.state.turn + i) % n]);
+      players = SD.players().map((_, i) => SD.players()[(SD.state.turn + i) % n]);
+      totals = Object.fromEntries(players.map(p => [p, 0]));
+      deck = newDeck(); round = 0;
+      newRound();
+    };
+    const newRound = () => {
+      // Le premier joueur change à chaque manche
+      order = players.map((_, i) => players[(round + i) % players.length]);
       hands = {}; state = {}; idx = 0;
       handoff();
     };
+    const board = () => `<div class="result-list small">${players.slice().sort((x, y) => totals[y] - totals[x]).map(q => {
+      const r = state[q] ? (state[q] === "bust" ? t("busted") : "+" + roundScore(q)) : "";
+      return `<div class="rrow ${state[q] === "bust" ? "lose" : ""}"><span>${esc(q)}${r ? ` <small>${r}</small>` : ""}</span><b>${totals[q] + (state[q] ? roundScore(q) : 0)}</b></div>`;
+    }).join("")}</div>`;
     const handoff = () => {
       const p = order[idx];
       const app = SD.render(`
         ${SD.gameTop("push")}
         <div class="center-stack">
-          ${idx > 0 ? `<div class="result-list small">${order.slice(0, idx).map(q => `<div class="rrow ${state[q] === "bust" ? "lose" : ""}"><span>${esc(q)}</span><b>${state[q] === "bust" ? t("busted") : sum(hands[q])}</b></div>`).join("")}</div>` : ""}
+          <p class="eyebrow">${t("roundN", { i: round + 1, n: rounds })}</p>
+          ${board()}
           <p class="eyebrow">${t("turnOf")}</p>
           <h1 class="display huge">${esc(p)}</h1>
           <button class="btn primary xl" data-act="go">${t("itsMe")}</button>
@@ -381,15 +412,15 @@
     };
     const turn = (last, msg) => {
       const p = order[idx], h = hands[p];
-      const best = Math.max(-1, ...order.slice(0, idx).filter(q => state[q] === "stop").map(q => sum(hands[q])));
       const app = SD.render(`
         ${SD.gameTop("push")}
         <div class="game-body">
+          <p class="eyebrow">${t("roundN", { i: round + 1, n: rounds })} · ${t("totalSoFar", { n: totals[p] })}</p>
           <p class="turn"><strong>${esc(p)}</strong></p>
-          <div class="push-total"><span class="label">${t("total")}</span><b class="tabnum">${sum(h)}</b>${best >= 0 ? `<span class="hint">${t("toBeat", { n: best })}</span>` : ""}</div>
+          <div class="push-total"><span class="label">${t("thisRound")}</span><b class="tabnum">${msg === "bust" ? 0 : sum(h) + (msg === "seven" ? BONUS : 0)}</b></div>
           <div class="push-hand">${h.map((v, i) => `<span class="ncard ${i === h.length - 1 && last != null ? "flip-in" : ""} ${msg === "bust" && v === last ? "bust" : ""}">${v}</span>`).join("") || `<span class="hint">${t("drawFirst")}</span>`}</div>
           <p class="hint tabnum">${t("uniqueCount", { n: new Set(h).size })}</p>
-          <p class="verdict ${msg === "bust" ? "bad" : msg === "seven" ? "good" : ""}" aria-live="polite">${msg === "bust" ? t("bustMsg", { n: last }) : msg === "seven" ? t("sevenMsg") : "&nbsp;"}</p>
+          <p class="verdict ${msg === "bust" ? "bad" : msg === "seven" ? "good" : ""}" aria-live="polite">${msg === "bust" ? t("bustMsg", { n: last }) : msg === "seven" ? t("sevenMsg", { n: BONUS }) : "&nbsp;"}</p>
         </div>
         <div class="actions">
           ${msg ? `<button class="btn primary xl wide" data-act="next">${t("next")}</button>`
@@ -411,25 +442,37 @@
     };
     const after = () => {
       const p = order[idx];
-      if (state[p] === "seven") return end(order.filter(q => q !== p), p);
-      idx++;
-      if (idx < order.length) return handoff();
-      const busted = order.filter(q => state[q] === "bust");
-      let losers = busted;
-      if (!busted.length) { const min = Math.min(...order.map(q => sum(hands[q]))); losers = order.filter(q => sum(hands[q]) === min); }
-      end(losers, null);
+      // 7 numéros différents : la manche s'arrête, ceux qui n'ont pas joué marquent 0
+      if (state[p] !== "seven" && ++idx < order.length) return handoff();
+      order.forEach(q => { if (!state[q]) state[q] = "skip"; });
+      players.forEach(q => { totals[q] += roundScore(q); });
+      round++;
+      if (round < rounds) return roundEnd(state[p] === "seven" ? p : null);
+      end();
     };
-    const end = (losers, sevenBy) => {
+    const roundEnd = sevenBy => {
+      const app = SD.render(`
+        ${SD.gameTop("push")}
+        <div class="center-stack">
+          <p class="eyebrow">${sevenBy ? t("sevenBy", { name: esc(sevenBy) }) : t("roundOver", { i: round })}</p>
+          <div class="result-list">${players.slice().sort((x, y) => totals[y] - totals[x]).map(q => `<div class="rrow"><span>${esc(q)}</span><b>${totals[q]}</b></div>`).join("")}</div>
+          <button class="btn primary xl" data-act="go">${t("nextRound", { i: round + 1, n: rounds })}</button>
+        </div>`, { cls: "game", awake: true });
+      SD.bind(app, { ...SD.topHandlers("push"), go: newRound });
+    };
+    const end = () => {
+      const min = Math.min(...players.map(q => totals[q]));
+      const losers = players.filter(q => totals[q] === min);
       SD.bad();
       const app = SD.render(`
         ${SD.gameTop("push")}
         <div class="center-stack">
-          ${sevenBy ? `<p class="eyebrow">${t("sevenBy", { name: esc(sevenBy) })}</p>` : `<p class="eyebrow">${t("results")}</p>
-          <div class="result-list">${order.slice().sort((x, y) => (state[x] === "bust") - (state[y] === "bust") || sum(hands[y]) - sum(hands[x])).map(q => `<div class="rrow ${losers.includes(q) ? "lose" : ""}"><span>${esc(q)}</span><b>${state[q] === "bust" ? t("busted") : sum(hands[q])}</b></div>`).join("")}</div>`}
+          <p class="eyebrow">${t("results")}</p>
+          <div class="result-list">${players.slice().sort((x, y) => totals[y] - totals[x]).map(q => `<div class="rrow ${losers.includes(q) ? "lose" : ""}"><span>${esc(q)}</span><b>${totals[q]}</b></div>`).join("")}</div>
           <h1 class="display">${t("quizQueue", { names: losers.map(n => `<span class="hl">${esc(n)}</span>`).join(", ") })}</h1>
           <button class="btn primary xl" data-act="quiz">${t("quizTime")}</button>
         </div>`, { cls: "game", awake: true });
-      SD.bind(app, { ...SD.topHandlers("push"), quiz: () => { SD.nextTurn(); SD.runQuiz(losers, { onContinue: start }); } });
+      SD.bind(app, { ...SD.topHandlers("push"), quiz: () => { SD.nextTurn(); SD.runQuiz(losers, { onContinue: newMatch }); } });
     };
     SD.addGame({ id: "push", mode: "one", min: 2, start });
   })();
