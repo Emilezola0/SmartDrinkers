@@ -181,7 +181,7 @@
       const s = c.state;
       if (s.phase === "boom") {
         const losers = [s.loser];
-        SD.boomSound(); SD.buzz([400, 100, 400]);
+        const L = c.local(); if (!L.boomed) { L.boomed = true; SD.boomSound(); SD.buzz([400, 100, 400]); }
         const app = SD.render(O.frame(c, `<h1 class="display mega">${s.refiled ? t("refiled") : t("boom")}</h1>${loserText(c, losers)}<div class="btn-col">${O.endButtons(c, losers)}</div>`), { cls: "game exploded", awake: true });
         return SD.bind(app, { ...O.baseHandlers(c), ...O.endHandlers(c) });
       }
@@ -322,7 +322,7 @@
   O.games.otraitor = {
     start: c => {
       const alive = {}; c.online.forEach(p => (alive[p.uid] = true));
-      return { phase: "choose", round: 1, alive, shield: null, lastShield: null, choices: null, chambers: CHAMBERS, log: null, out: null, quizRes: null };
+      return { phase: "choose", round: 1, alive, shield: null, lastShield: null, choices: null, chambers: CHAMBERS, log: null, out: null, qz: null };
     },
     view: c => {
       const s = c.state, alive = s.alive || {}, shield = s.shield || {}, choices = s.choices || {}, lastShield = s.lastShield || {};
@@ -373,7 +373,7 @@
           c.isHost ? (s.phase === "end"
             ? `<button class="btn primary xl" data-act="again">${t("again")}</button><button class="btn ghost xl" data-act="lobbyBack">${t("backLobby")}</button>`
             : `<button class="btn primary xl wide" data-act="nextRound">${t("trNext")}</button>`) : ""), { cls: "game", awake: true });
-        if (s.out === c.uid) SD.bad();
+        const L = c.local(); if (s.out === c.uid && L.badRound !== s.round) { L.badRound = s.round; SD.bad(); }
         return SD.bind(app, {
           ...O.baseHandlers(c), ...O.endHandlers(c),
           nextRound: () => c.setState({ phase: "choose", round: s.round + 1, choices: null, shield: s.nextShield || null, nextShield: null, log: null, out: null })
@@ -400,4 +400,5 @@
       });
     }
   };
+  O.games.otraitor.min = 3;
 })();

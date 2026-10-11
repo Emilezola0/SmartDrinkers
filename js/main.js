@@ -64,7 +64,7 @@
           <button class="btn primary xl" data-act="shareApp">${SD.icon("share")} ${t("shareApp")}</button>
         </div>
         <p class="footnote">${t("moderation")}</p>
-      </main>`, { cls: "homescreen" });
+      </main>`, { cls: "homescreen", key: "home" });
 
     app.querySelector("#addForm").addEventListener("submit", e => {
       e.preventDefault();
@@ -191,7 +191,7 @@
         </div>
         <p class="hint">${t("offlineNote")}</p>
         <p class="footnote">SmartDrinkers · v${SD.APP_VERSION}</p>
-      </main>`, { cls: "settingscreen" });
+      </main>`, { cls: "settingscreen", key: "settings" });
 
     const useText = text => {
       const nb = SD.buildBank(text);

@@ -119,7 +119,7 @@
         let n = s.n + 1, di = s.di;
         if (n > s.per) { n = 1; di++; }
         if (di >= order.length) return c.setState({ phase: "end" });
-        c.setState({ phase: "load", di, n, song: null, hints: 0, buzz: null, locked: null, last: null, hq: null, ha: null, quizRes: null });
+        c.setState({ phase: "load", di, n, song: null, hints: 0, buzz: null, locked: null, last: null, hq: null, ha: null, qz: null });
       };
 
       if (s.phase === "end") {
@@ -269,8 +269,10 @@
         listen: () => playFor(song.preview, 15),
         ans: (e, el) => c.setState({ ["ans/" + c.uid]: el.dataset.v }),
         force: () => { const u = {}; c.online.forEach(p => { if (ans[p.uid] === right) u["scores/" + p.uid] = (scores[p.uid] || 0) + 1; }); c.setState({ phase: "rev", ...u }); },
-        next: () => { stopAudio(); s.n >= s.total ? c.setState({ phase: "end" }) : c.setState({ phase: "load", n: s.n + 1, song: null, q: null, ans: null, quizRes: null }); }
+        next: () => { stopAudio(); s.n >= s.total ? c.setState({ phase: "end" }) : c.setState({ phase: "load", n: s.n + 1, song: null, q: null, ans: null, qz: null }); }
       });
     }
   };
+  O.games.oblind.sound = true;
+  O.games.ohl.sound = true;
 })();

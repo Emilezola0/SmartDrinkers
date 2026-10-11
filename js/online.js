@@ -197,36 +197,93 @@
   const renderRoom = () => {
     if (!O.room || !O.room.data) return;
     const c = ctx();
+    const st = c.state;
+    // Clé d'écran : tant que la partie reste à la même étape, le défilement est conservé
+    SD._pendingKey = ["room", c.code, c.d.status, c.d.status === "playing" ? c.d.game : "", st.phase || "", st.n || "", st.round || "", st.di || ""].join(":");
     if (c.d.status === "playing" && O.games[c.d.game]) return O.games[c.d.game].view(c);
     lobby(c);
   };
 
+  /* ---------- Salle d'attente ---------- */
+  // Jeux rangés par catégorie ; un jeu absent des catégories va dans « Autres »
+  const CATS = [["quiz", ["buzz", "osync", "oblind", "ohl"]], ["speed", ["oreflex", "ochrono", "obomb"]], ["bluff", ["most", "ointrus", "otraitor"]], ["luck", ["opush"]]];
+  const QUIZ_OPT = { k: "quiz", def: "1", label: () => t("quizMandatory"), choices: () => [["1", t("yes")], ["0", t("no")]] };
+  const gameMin = g => (O.games[g] && O.games[g].min) || 2;
+  const showRules = g => SD.modal(t("og_" + g), `<div class="rules">${SD.nl2p(t("og_" + g + "_r"))}</div>`);
+
   const lobby = c => {
     const url = (SD.appUrl ? SD.appUrl() : location.href.split("#")[0]) + "#room=" + c.code;
-    const games = Object.keys(O.games);
+    const known = new Set(CATS.flatMap(x => x[1]));
+    const cats = CATS.map(([k, ids]) => [k, ids.filter(g => O.games[g])]).concat([["other", Object.keys(O.games).filter(g => !known.has(g))]]).filter(x => x[1].length);
+    const card = g => `
+      <div class="gcard">
+        <button class="gmain" data-act="game" data-g="${g}">
+          <span class="gname">${t("og_" + g)}</span>
+          <span class="gdesc">${t("og_" + g + "_d")}</span>
+          <span class="badge each">${SD.icon("phones")}${t("minPlayers", { n: gameMin(g) })}${O.games[g].sound ? ` · ${t("withSound")}` : ""}</span>
+        </button>
+        <button class="icon-btn ghelp" data-act="grules" data-g="${g}" aria-label="${t("rules")} · ${t("og_" + g)}">${SD.icon("help")}</button>
+      </div>`;
     const app = SD.render(O.frame(c, `
-      <p class="eyebrow">${t("lobby")}</p>
-      <div class="qr-box small">${SD.qrSvg(url)}</div>
-      <p class="code-line"><span class="label">${t("code")}</span><strong class="mono room-code">${esc(c.code)}</strong></p>
+      <div class="lobby-top">
+        <div class="qr-box small">${SD.qrSvg(url)}</div>
+        <div class="lobby-info">
+          <span class="label">${t("code")}</span><strong class="mono room-code">${esc(c.code)}</strong>
+          <span class="hint">${t("lobbyJoinHelp")}</span>
+        </div>
+      </div>
       <div class="player-list">${c.players.map(p => `<span class="pl ${p.online === false ? "off" : ""}"><i></i>${esc(p.name)}${p.uid === c.d.host ? ` <small>${t("hostTag")}</small>` : ""}${p.uid === c.uid ? ` <small>${t("youTag")}</small>` : ""}</span>`).join("")}</div>
-      ${c.isHost ? `<div class="field"><span class="label">${t("chooseGame")}</span>
-        <div class="game-pick">${games.map(g => `<button class="gp ${g === c.d.game ? "on" : ""}" data-act="pickGame" data-g="${g}" aria-pressed="${g === c.d.game}">${t("og_" + g)}</button>`).join("")}</div></div>
-        <div class="picked"><strong>${t("og_" + c.d.game)}</strong><span>${t("og_" + c.d.game + "_d")}</span><button class="btn link" data-act="orules">${t("rules")}</button></div>
-        ${O.games[c.d.game] && O.games[c.d.game].options ? O.options(c, O.games[c.d.game].options) : ""}
-        ${O.options(c, [{ k: "quiz", def: "1", label: () => t("quizMandatory"), choices: () => [["1", t("yes")], ["0", t("no")]] }])}
-        <p class="hint">${t("quizMandatoryHelp")}</p>`
-        : `<p class="lead">${t("gameChosen", { g: t("og_" + c.d.game) })}</p><p class="hint">${c.quizOn ? t("quizModeOn") : t("quizModeOff")}</p><p class="hint">${t("waitHost")}</p>`}
-    `, c.isHost ? `<button class="btn primary xl wide" data-act="launch" ${c.online.length >= 2 ? "" : "disabled"}>${c.online.length >= 2 ? t("launch") : t("needTwo")}</button>` : ""), { cls: "game", awake: true });
+      <p class="lead lobby-call">${c.isHost ? t("hostPick") : t("waitHostPick", { name: esc(c.name(c.d.host)) })}</p>
+      ${cats.map(([k, ids]) => `<section class="block lobby-cat"><h2 class="section-title">${t("cat_" + k)}</h2><div class="game-grid">${ids.map(card).join("")}</div></section>`).join("")}
+      <p class="hint">${t("holdHint")}</p>
+    `), { cls: "game", awake: true });
+    app.querySelectorAll(".gmain").forEach(el => SD.longPress(el, () => showRules(el.dataset.g)));
     SD.bind(app, {
       ...O.baseHandlers(c),
-      pickGame: (e, el) => c.update({ game: el.dataset.g }),
-      launch: () => c.update({ status: "playing", state: { ...O.games[c.d.game].start(c), gid: Math.random().toString(36).slice(2, 8) } }),
-      opt: (e, el) => c.update({ ["opts/" + el.dataset.k]: el.dataset.v }),
-      optm: (e, el) => {
-        const k = el.dataset.k, set = new Set(String(c.opts[k] ?? el.dataset.def).split(",").filter(Boolean));
+      grules: (e, el) => showRules(el.dataset.g),
+      game: (e, el) => c.isHost ? openLaunch(el.dataset.g) : showRules(el.dataset.g),
+      opt: (e, el) => c.update({ ["opts/" + el.dataset.k]: el.dataset.v })
+    });
+  };
+
+  // Fenêtre « Lancer ce jeu ? » avec les réglages du jeu ; rien n'est envoyé avant d'appuyer sur Lancer
+  const openLaunch = g => {
+    const base = ctx();
+    const pending = { ...base.opts };
+    const opts = (O.games[g].options || []);
+    const body = () => {
+      const c = ctx(), min = gameMin(g), enough = c.online.length >= min;
+      return `<p class="lead">${t("og_" + g + "_d")}</p>
+        <button class="btn link" data-m="rules">${t("rules")}</button>
+        ${O.options({ opts: pending }, opts)}
+        ${O.options({ opts: pending }, [QUIZ_OPT])}
+        <p class="hint">${t("quizMandatoryHelp")}</p>
+        <div class="btn-col center">
+          <button class="btn primary xl" data-m="launch" ${enough ? "" : "disabled"}>${enough ? t("launchThis") : t("needN", { n: min })}</button>
+          <button class="btn ghost" data-m="cancel">${t("cancel")}</button>
+        </div>`;
+    };
+    SD.modal(t("launchQ", { g: t("og_" + g) }), `<div class="launch-body">${body()}</div>`);
+    const m = document.getElementById("modal");
+    if (!m) return;
+    const wrap = m.querySelector(".launch-body");
+    const redraw = () => { wrap.innerHTML = body(); };
+    wrap.addEventListener("click", e => {
+      const el = e.target.closest("button"); if (!el) return;
+      if (el.dataset.act === "opt") { pending[el.dataset.k] = el.dataset.v; return redraw(); }
+      if (el.dataset.act === "optm") {
+        const k = el.dataset.k, set = new Set(String(pending[k] ?? el.dataset.def).split(",").filter(Boolean));
         set.has(el.dataset.v) ? set.delete(el.dataset.v) : set.add(el.dataset.v);
         if (!set.size) return SD.toast(t("pickOne"));
-        c.update({ ["opts/" + k]: [...set].join(",") });
+        pending[k] = [...set].join(","); return redraw();
+      }
+      if (el.dataset.m === "rules") return showRules(g);
+      if (el.dataset.m === "cancel") return SD.closeModal();
+      if (el.dataset.m === "launch") {
+        const c = ctx();
+        if (!c.isHost) return SD.closeModal();
+        SD.closeModal();
+        c.update({ game: g, opts: pending, status: "playing", state: { ...O.games[g].start({ ...c, opts: pending }), gid: Math.random().toString(36).slice(2, 8) } });
       }
     });
   };
@@ -245,21 +302,56 @@
 
   /* ---------- Outils communs aux jeux ---------- */
   O.scoreList = (c, scores, losers = []) => `<div class="result-list">${c.players.slice().sort((a, b) => (scores[b.uid] || 0) - (scores[a.uid] || 0)).map(p => `<div class="rrow ${losers.includes(p.uid) ? "lose" : ""}"><span>${esc(p.name)}</span><b>${scores[p.uid] || 0}</b></div>`).join("")}</div>`;
+  /* ---------- Quiz du perdant, visible par tout le monde ----------
+     state.qz[uid] = { step: "diff" | "q" | "a" | "r", d, q, ok, sips }
+     Le perdant choisit sa difficulté, lit la question, affiche la réponse puis dit s'il avait bon.
+     Les autres suivent en direct ; ils ne voient la réponse que quand le perdant l'affiche. */
+  const qzCard = (c, u) => {
+    const qz = (c.state.qz || {})[u] || { step: "diff" }, me = u === c.uid, name = esc(c.name(u));
+    const sipTxt = n => t("drink", { n, s: SD.sipWord(n) });
+    if (qz.step === "r") return `<div class="qz-card ${qz.ok ? "ok" : "ko"}"><p class="qz-name">${name}</p>
+      <p class="verdict ${qz.ok ? "good" : "bad"}">${qz.ok ? t("qzSaved") : sipTxt(qz.sips || 1)}</p></div>`;
+    if (qz.step === "diff") {
+      if (!me) return `<div class="qz-card"><p class="qz-name">${name}</p><p class="hint">${t("qzChoosing", { name })}</p></div>`;
+      const used = SD.usedDiffs(c.me.name || "");
+      return `<div class="qz-card me"><p class="qz-name">${t("chooseDiff", { name: `<span class="hl">${name}</span>` })}</p>
+        <div class="diff-grid">${["E", "M", "H"].map(d => used.includes(d)
+          ? `<button class="diff-btn ${SD.diffClass(d)} used" disabled><span class="dn">${SD.diffName(d)}</span><span class="dc">${t("diffUsed")}</span></button>`
+          : `<button class="diff-btn ${SD.diffClass(d)}" data-act="qzDiff" data-d="${d}"><span class="dn">${SD.diffName(d)}</span><span class="dc">${t("missCost", { n: SD.state.sips[d] })} ${SD.sipWord(SD.state.sips[d])}</span></button>`).join("")}</div></div>`;
+    }
+    const revealed = qz.step === "a";
+    const head = me ? `<p class="qz-name">${t("qzYourTurn")}</p>` : `<p class="qz-shh">🤫 ${t("qzShh", { name })}</p>`;
+    const ctl = me ? (revealed
+        ? `<div class="row-btns center"><button class="btn bad" data-act="qzKo">${t("missed")}</button><button class="btn good" data-act="qzOk">${t("gotIt")}</button></div>`
+        : `<button class="btn primary" data-act="qzReveal">${t("showAnswer")}</button>`)
+      : `<p class="hint">${revealed ? t("qzJudging", { name }) : t("qzAnswering", { name })}</p>`;
+    return `<div class="qz-card ${me ? "me" : ""}">${head}${SD.questionCard(qz.q, revealed)}${ctl}</div>`;
+  };
   // Ce qui arrive aux perdants : quiz obligatoire (qui peut sauver) ou gorgée directe
   O.loserBlock = (c, losers) => {
     if (!losers.length) return "";
-    const qr = c.state.quizRes || {};
     if (!c.quizOn) return `<p class="lead">${t("mostDrinks", { names: losers.map(u => esc(c.name(u))).join(", ") })}</p>`;
-    const status = u => qr[u] === "ok" ? `<b class="ok">${t("qSaved")}</b>` : qr[u] === "ko" ? `<b class="ko">${t("qDrinks")}</b>` : `<small>${t("qPending")}</small>`;
-    return `<div class="result-list small">${losers.map(u => `<div class="rrow"><span>${esc(c.name(u))}</span>${status(u)}</div>`).join("")}</div>
-      ${losers.includes(c.uid) && !qr[c.uid] ? `<button class="btn primary xl" data-act="myQuiz">${t("myQuizMandatory")}</button>` : ""}`;
+    return `<div class="qz-list">${losers.map(u => qzCard(c, u)).join("")}</div>`;
   };
-  O.endButtons = (c, losers) => {
-    const meLoses = losers.includes(c.uid) && c.quizOn && !(c.state.quizRes || {})[c.uid];
-    return `${O.loserBlock(c, losers)}
-      ${c.isHost ? `<button class="btn ${meLoses ? "ghost" : "primary xl"}" data-act="again">${t("again")}</button><button class="btn ghost" data-act="lobbyBack">${t("backLobby")}</button>` : `<p class="hint">${t("waitHost")}</p>`}`;
+  O.quizPending = (c, losers) => c.quizOn && losers.some(u => ((c.state.qz || {})[u] || {}).step !== "r");
+  O.endButtons = (c, losers) => `${O.loserBlock(c, losers)}
+      ${c.isHost ? `<button class="btn ${losers.includes(c.uid) && O.quizPending(c, [c.uid]) ? "ghost" : "primary xl"}" data-act="again">${t("again")}</button><button class="btn ghost" data-act="lobbyBack">${t("backLobby")}</button>` : `<p class="hint">${t("waitHost")}</p>`}`;
+  O.quizHandlers = c => {
+    const set = v => c.setState({ ["qz/" + c.uid]: v });
+    const cur = () => (c.state.qz || {})[c.uid] || {};
+    return {
+      qzDiff: (e, el) => {
+        const d = el.dataset.d, q = SD.drawQuestion(d);
+        if (!q) return SD.toast(t("noQuestions"));
+        SD.markDiff(c.me.name || "", d); SD.beep(520, .05);
+        set({ step: "q", d, sips: SD.state.sips[d], q: { q: q.q, a: q.a, detail: q.detail || "", qEn: q.qEn || "", aEn: q.aEn || "", detailEn: q.detailEn || "", theme: q.theme, diff: q.diff } });
+      },
+      qzReveal: () => set({ ...cur(), step: "a" }),
+      qzOk: () => { SD.good(); set({ ...cur(), step: "r", ok: true }); },
+      qzKo: () => { SD.bad(); set({ ...cur(), step: "r", ok: false }); }
+    };
   };
-  O.endHandlers = c => ({ myQuiz: () => c.quiz(c.me.name || t("you")), again: () => c.restart(), lobbyBack: () => c.toLobby() });
+  O.endHandlers = c => ({ ...O.quizHandlers(c), again: () => c.restart(), lobbyBack: () => c.toLobby() });
 
   // Question tirée par l'hôte : envoyée en entier pour que tout le monde voie la même
   O.pickQuestion = () => {
@@ -359,9 +451,8 @@
           ${O.loserBlock(c, losers)}`,
           c.isHost ? `<button class="btn primary xl wide" data-act="nextP">${s.n >= s.total ? t("seeResults") : t("nextQuestion")}</button>` : ""), { cls: "game", awake: true });
         return SD.bind(app, {
-          ...O.baseHandlers(c),
-          myQuiz: () => c.quiz(c.me.name || t("you")),
-          nextP: () => s.n >= s.total ? c.setState({ phase: "end", quizRes: null }) : c.setState({ phase: "vote", n: s.n + 1, votes: null, quizRes: null })
+          ...O.baseHandlers(c), ...O.quizHandlers(c),
+          nextP: () => s.n >= s.total ? c.setState({ phase: "end", qz: null }) : c.setState({ phase: "vote", n: s.n + 1, votes: null, qz: null })
         });
       }
       const mine = votes[c.uid];

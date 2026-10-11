@@ -119,6 +119,15 @@
 
   /* ---------- Déroulé du quiz pour une liste de perdants ---------- */
   // names : liste de prénoms ; opts.onContinue : relance le jeu ; opts.solo : quiz sur son propre téléphone
+  // Difficultés déjà choisies par chaque joueur : grisées jusqu'à ce que les trois aient été prises
+  SD.usedDiffs = name => { const all = SD.load("diffUsed", {}); return all[name] || []; };
+  SD.markDiff = (name, d) => {
+    const all = SD.load("diffUsed", {});
+    let list = (all[name] || []).filter(x => x !== d).concat(d);
+    if (list.length >= 3) list = []; // les trois faites : tout redevient disponible
+    all[name] = list; SD.save("diffUsed", all);
+  };
+
   SD.runQuiz = (names, opts = {}) => {
     names = names.length ? names : [t("you")];
     let i = 0;
@@ -136,14 +145,7 @@
       SD.bind(app, { cont: () => opts.onContinue(), home: () => SD.home() });
     };
 
-    // Difficultés déjà choisies par chaque joueur : grisées jusqu'à ce que les trois aient été prises
-    const usedDiffs = name => { const all = SD.load("diffUsed", {}); return all[name] || []; };
-    const markDiff = (name, d) => {
-      const all = SD.load("diffUsed", {});
-      let list = (all[name] || []).filter(x => x !== d).concat(d);
-      if (list.length >= 3) list = []; // les trois faites : tout redevient disponible
-      all[name] = list; SD.save("diffUsed", all);
-    };
+    const usedDiffs = SD.usedDiffs, markDiff = SD.markDiff;
     const chooseDiff = () => {
       const name = names[i];
       const s = SD.state.sips;

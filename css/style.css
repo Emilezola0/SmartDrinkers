@@ -464,6 +464,25 @@ body[data-screen~="exploded"] { background: var(--bad); }
 .credit { color: var(--muted); font-size: .78rem; margin: 0; }
 .credit a { color: var(--accent); }
 
+.qz-list { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 440px; }
+.qz-card { background: var(--bg-2); border: 2px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
+.qz-card.me { border-color: var(--accent); }
+.qz-card.ok { border-color: var(--good); } .qz-card.ko { border-color: var(--bad); }
+.qz-card .diff-grid { max-width: none; }
+.qz-card .diff-btn { padding: 14px 16px; }
+.qz-name { margin: 0; font: 400 1.3rem var(--f-display); }
+.qz-shh { margin: 0; font: 400 1.25rem var(--f-display); color: var(--accent); }
+
+.lobby-top { display: flex; gap: 14px; align-items: center; width: 100%; max-width: 440px; }
+.lobby-top .qr-box.small { width: 132px; flex: none; padding: 8px; }
+.lobby-info { display: flex; flex-direction: column; gap: 4px; text-align: left; min-width: 0; }
+.lobby-call { color: var(--ink); font-weight: 800; }
+.lobby-cat { width: 100%; text-align: left; }
+.lobby-cat .gname { font-size: 1.45rem; }
+.launch-body { display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; }
+.launch-body .field { align-items: center; }
+.btn-col.center { align-items: center; margin: 4px auto 0; }
+
 /* ---------- Installation & mise à jour ---------- */
 .install-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: var(--r); padding: 14px 14px 14px 16px; }
 .install-card > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

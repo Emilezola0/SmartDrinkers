@@ -99,8 +99,12 @@
     app.className = "screen " + (opts.cls || "");
     document.body.dataset.screen = opts.cls || "";
     SD.screenId = (SD.screenId || 0) + 1;
+    // Même écran redessiné (réglage modifié, mise à jour d'un autre joueur…) : on garde la position de défilement
+    const key = opts.key || SD._pendingKey || null; SD._pendingKey = null;
+    const keep = key && key === SD._lastKey, y = window.scrollY;
+    SD._lastKey = key;
     app.innerHTML = html;
-    window.scrollTo(0, 0);
+    window.scrollTo(0, keep ? y : 0);
     SD.awakeWanted = !!opts.awake; SD.keepAwake(!!opts.awake);
     return app;
   };
