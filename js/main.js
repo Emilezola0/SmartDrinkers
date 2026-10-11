@@ -48,16 +48,16 @@
           <h2 class="section-title">${SD.icon("phone")} ${t("onePhone")}</h2>
           <div class="game-grid">${one.map(gameCard).join("")}</div>
         </section>
-        <section class="block">
+        ${navigator.onLine && SD.online ? "" : `<section class="block">
           <h2 class="section-title">${SD.icon("phones")} ${t("eachPhone")}</h2>
           <div class="multi-row">
             <button class="btn primary xl" data-act="create">${SD.icon("plus")} ${t("createGame")}</button>
             <button class="btn ghost xl" data-act="join">${SD.icon("qr")} ${t("join")}</button>
           </div>
           <div class="game-grid">${each.map(gameCard).join("")}</div>
-          <p class="hint">${t("holdHint")}</p>
-        </section>
-        ${SD.online ? SD.online.homeHtml() : ""}
+        </section>`}
+        <p class="hint">${t("holdHint")}</p>
+        ${SD.online && navigator.onLine ? SD.online.homeHtml() : ""}
 
         <div class="quick">
           <button class="btn ghost xl" data-act="free">${SD.icon("glass")} ${t("freeQuiz")}</button>
@@ -311,6 +311,10 @@
       window.addEventListener("online", () => SD.checkUpdate(false));
     }
   };
+  // Réseau qui va et vient : on redessine l'accueil pour afficher la bonne section
+  const refreshHome = () => { if (document.querySelector(".home") && !(SD.online && SD.online.room)) SD.home(); };
+  window.addEventListener("online", refreshHome);
+  window.addEventListener("offline", refreshHome);
   window.addEventListener("hashchange", () => { const info = SD.parseCode(location.hash); if (info) SD.openCode(info, false); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") SD.closeModal(); });
   SD.boot();

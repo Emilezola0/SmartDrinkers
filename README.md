@@ -86,6 +86,7 @@ js/games2.js          421, Le Contrat, Chrono
 js/version.js         numéro de version de l'appli
 js/share.js           code partagé, QR, L'Intrus, Quiz Synchro
 js/online.js          mode en ligne : salons hôte/joueurs (Firebase), Buzzer Quiz, Le plus susceptible de…
+js/online-games.js    versions en ligne : Chrono, Réflexe, Pioche ou Stop, La Bombe, L'Intrus, Quiz Synchro
 js/main.js            accueil et réglages
 js/lib/               qrcode-generator (MIT), jsQR (Apache 2.0), firebase/ (SDK Firebase, Apache 2.0)
 data/                 questions

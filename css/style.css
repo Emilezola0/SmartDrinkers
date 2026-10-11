@@ -415,6 +415,13 @@ body[data-screen~="exploded"] { background: var(--bad); }
 .vote { border: 2px solid transparent; border-radius: var(--r-sm); background: var(--surface); padding: 14px 10px; font-weight: 800; font-size: 1.05rem; }
 .vote.on { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 
+.duel.solo { grid-template-rows: 1fr; }
+.duel.solo .half { background: var(--bad); color: #2e0703; }
+.duel.solo .dmsg { color: #2e0703; font: 400 1.8rem var(--f-display); }
+.duel.solo.go .half { background: var(--good); color: #062a1e; }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--muted); }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
 /* ---------- Installation & mise à jour ---------- */
 .install-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: var(--r); padding: 14px 14px 14px 16px; }
 .install-card > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

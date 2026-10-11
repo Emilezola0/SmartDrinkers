@@ -25,6 +25,8 @@
     let user = auth.currentUser || await new Promise(r => { const un = auth.onAuthStateChanged(u => { un(); r(u); }); });
     if (!user) user = (await auth.signInAnonymously()).user;
     O.uid = user.uid; O.db = firebase.database();
+    O.offset = 0;
+    O.db.ref(".info/serverTimeOffset").on("value", sn => { O.offset = sn.val() || 0; });
     return O;
   })().catch(e => { O.ready = null; console.error(e); throw e; }));
   const TS = () => firebase.database.ServerValue.TIMESTAMP;
@@ -156,7 +158,13 @@
       render: renderRoom,
       quiz: name => { r.view = "quiz"; SD.runQuiz([name], { onContinue: () => { if (O.room) { O.room.view = "room"; renderRoom(); } else SD.home(); } }); },
       toLobby: () => r.ref.update({ status: "lobby", state: null }),
-      restart: () => r.ref.update({ state: O.games[d.game].start(ctx()) })
+      opts: d.opts || {},
+      now: () => Date.now() + (O.offset || 0),
+      // Empêche les mises à jour des autres de redessiner l'écran pendant une action locale (chrono, réflexe…)
+      hold: () => { r.view = "local"; },
+      release: () => { if (O.room) { O.room.view = "room"; renderRoom(); } },
+      local: () => { const k = d.game + ":" + ((d.state || {}).gid || ""); if (!O.local || O.local.k !== k) O.local = { k }; return O.local; },
+      restart: () => r.ref.update({ state: { ...O.games[d.game].start(ctx()), gid: Math.random().toString(36).slice(2, 8) } })
     };
   };
 
@@ -194,15 +202,24 @@
       <p class="code-line"><span class="label">${t("code")}</span><strong class="mono room-code">${esc(c.code)}</strong></p>
       <div class="player-list">${c.players.map(p => `<span class="pl ${p.online === false ? "off" : ""}"><i></i>${esc(p.name)}${p.uid === c.d.host ? ` <small>${t("hostTag")}</small>` : ""}${p.uid === c.uid ? ` <small>${t("youTag")}</small>` : ""}</span>`).join("")}</div>
       ${c.isHost ? `<div class="field"><span class="label">${t("chooseGame")}</span>
-        <div class="choose-list">${games.map(g => `<button class="choose ${g === c.d.game ? "on" : ""}" data-act="pickGame" data-g="${g}"><span class="gname">${t("og_" + g)}</span><span class="gdesc">${t("og_" + g + "_d")}</span></button>`).join("")}</div></div>`
+        <div class="choose-list">${games.map(g => `<button class="choose ${g === c.d.game ? "on" : ""}" data-act="pickGame" data-g="${g}"><span class="gname">${t("og_" + g)}</span><span class="gdesc">${t("og_" + g + "_d")}</span></button>`).join("")}</div></div>
+        ${O.games[c.d.game] && O.games[c.d.game].options ? O.options(c, O.games[c.d.game].options) : ""}`
         : `<p class="lead">${t("gameChosen", { g: t("og_" + c.d.game) })}</p><p class="hint">${t("waitHost")}</p>`}
     `, c.isHost ? `<button class="btn primary xl wide" data-act="launch" ${c.online.length >= 2 ? "" : "disabled"}>${c.online.length >= 2 ? t("launch") : t("needTwo")}</button>` : ""), { cls: "game", awake: true });
     SD.bind(app, {
       ...O.baseHandlers(c),
       pickGame: (e, el) => c.update({ game: el.dataset.g }),
-      launch: () => c.update({ status: "playing", state: O.games[c.d.game].start(c) })
+      launch: () => c.update({ status: "playing", state: { ...O.games[c.d.game].start(c), gid: Math.random().toString(36).slice(2, 8) } }),
+      opt: (e, el) => c.update({ ["opts/" + el.dataset.k]: el.dataset.v })
     });
   };
+
+  /* Réglages d'un jeu dans le salon : [{ k, label, choices: [[valeur, texte]], def }] */
+  O.options = (c, list) => list.map(o => {
+    const cur = String(c.opts[o.k] ?? o.def);
+    return `<div class="field"><span class="label">${o.label()}</span><div class="seg" role="group">${o.choices().map(([v, l]) => `<button class="${String(v) === cur ? "on" : ""}" data-act="opt" data-k="${o.k}" data-v="${v}" aria-pressed="${String(v) === cur}">${l}</button>`).join("")}</div></div>`;
+  }).join("");
+  O.opt = (c, k, def) => c.opts[k] ?? def;
 
   /* ---------- Outils communs aux jeux ---------- */
   O.scoreList = (c, scores, losers = []) => `<div class="result-list">${c.players.slice().sort((a, b) => (scores[b.uid] || 0) - (scores[a.uid] || 0)).map(p => `<div class="rrow ${losers.includes(p.uid) ? "lose" : ""}"><span>${esc(p.name)}</span><b>${scores[p.uid] || 0}</b></div>`).join("")}</div>`;
@@ -291,7 +308,7 @@
           <div class="btn-col">${O.endButtons(c, losers)}</div>`), { cls: "game", awake: true });
         return SD.bind(app, { ...O.baseHandlers(c), ...O.endHandlers(c) });
       }
-      const prompt = list[s.deck[s.n - 1]] || "";
+      const prompt = list[Object.values(s.deck || {})[s.n - 1]] || "";
       const voters = Object.keys(votes).length, need = c.online.length;
       if (s.phase === "vote" && c.isHost && voters >= need && need > 0) {
         // Tout le monde a voté : l'hôte révèle
