@@ -57,6 +57,10 @@ E = facile, M = moyen, H = difficile. Les colonnes `_EN` contiennent la version 
 
 Les salons utilisent Firebase Realtime Database (projet `smartdrinkers`). La configuration est en haut de `js/online.js`. Chaque salon est stocké sous `rooms/<CODE>` : l'hôte arbitre la partie, les autres envoient leurs actions (buzz, votes). Ajouter un jeu en ligne : ajouter un objet `O.games.<id> = { start, view }` dans `js/online.js` et ses textes `og_<id>`, `og_<id>_d`, `og_<id>_r`.
 
+## Morceaux du Blind Test
+
+`data/songs.js` contient environ 300 morceaux : `[titre, artiste, année, "f" ou "i", difficulté 1-3, album, ventes de l'album en millions]` (les deux derniers sont facultatifs et servent aux questions Plus ou Moins). L'extrait de 30 s, la pochette et le nombre de fans sont récupérés sur Deezer au moment de jouer. Pour ajouter un morceau, ajoute une ligne dans la bonne décennie.
+
 ## Publier une mise à jour
 
 Chaque modification doit changer le numéro de version, sinon les téléphones gardent l'ancienne appli en mémoire :
@@ -86,10 +90,11 @@ js/games2.js          421, Le Contrat, Chrono
 js/version.js         numéro de version de l'appli
 js/share.js           code partagé, QR, L'Intrus, Quiz Synchro
 js/online.js          mode en ligne : salons hôte/joueurs (Firebase), Buzzer Quiz, Le plus susceptible de…
-js/online-games.js    versions en ligne : Chrono, Réflexe, Pioche ou Stop, La Bombe, L'Intrus, Quiz Synchro
+js/online-games.js    versions en ligne : Chrono, Réflexe, Pioche ou Stop, La Bombe, L'Intrus, Quiz Synchro, La roulette du traître
+js/online-music.js    Blind Test et Plus ou Moins musical (extraits Deezer)
 js/main.js            accueil et réglages
 js/lib/               qrcode-generator (MIT), jsQR (Apache 2.0), firebase/ (SDK Firebase, Apache 2.0)
-data/                 questions
+data/                 questions (questions.tsv / .js) et morceaux (songs.js)
 icons/                icônes de l'appli
 ```
 

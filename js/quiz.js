@@ -195,6 +195,7 @@
     const result = (ok, diff) => {
       const n = SD.state.sips[diff];
       ok ? SD.good() : SD.bad();
+      if (opts.onResult) { try { opts.onResult(names[i], ok, diff); } catch (e) {} }
       const last = i >= names.length - 1;
       const app = SD.render(`
         <div class="center-stack result ${ok ? "is-good" : "is-bad"}">

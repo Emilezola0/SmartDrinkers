@@ -156,7 +156,15 @@
       update: obj => r.ref.update(obj),
       setState: obj => { const u = {}; for (const k in obj) u["state/" + k] = obj[k]; return r.ref.update(u); },
       render: renderRoom,
-      quiz: name => { r.view = "quiz"; SD.runQuiz([name], { onContinue: () => { if (O.room) { O.room.view = "room"; renderRoom(); } else SD.home(); } }); },
+      quizOn: String((d.opts || {}).quiz ?? "1") === "1",
+      // Quiz du perdant sur son propre téléphone ; le résultat est partagé (sauvé / boit)
+      quiz: name => {
+        r.view = "quiz";
+        SD.runQuiz([name], {
+          onResult: (n, ok) => { try { r.ref.child("state/quizRes/" + O.uid).set(ok ? "ok" : "ko"); } catch (e) {} },
+          onContinue: () => { if (O.room) { O.room.view = "room"; renderRoom(); } else SD.home(); }
+        });
+      },
       toLobby: () => r.ref.update({ status: "lobby", state: null }),
       opts: d.opts || {},
       now: () => Date.now() + (O.offset || 0),
@@ -202,20 +210,34 @@
       <p class="code-line"><span class="label">${t("code")}</span><strong class="mono room-code">${esc(c.code)}</strong></p>
       <div class="player-list">${c.players.map(p => `<span class="pl ${p.online === false ? "off" : ""}"><i></i>${esc(p.name)}${p.uid === c.d.host ? ` <small>${t("hostTag")}</small>` : ""}${p.uid === c.uid ? ` <small>${t("youTag")}</small>` : ""}</span>`).join("")}</div>
       ${c.isHost ? `<div class="field"><span class="label">${t("chooseGame")}</span>
-        <div class="choose-list">${games.map(g => `<button class="choose ${g === c.d.game ? "on" : ""}" data-act="pickGame" data-g="${g}"><span class="gname">${t("og_" + g)}</span><span class="gdesc">${t("og_" + g + "_d")}</span></button>`).join("")}</div></div>
-        ${O.games[c.d.game] && O.games[c.d.game].options ? O.options(c, O.games[c.d.game].options) : ""}`
-        : `<p class="lead">${t("gameChosen", { g: t("og_" + c.d.game) })}</p><p class="hint">${t("waitHost")}</p>`}
+        <div class="game-pick">${games.map(g => `<button class="gp ${g === c.d.game ? "on" : ""}" data-act="pickGame" data-g="${g}" aria-pressed="${g === c.d.game}">${t("og_" + g)}</button>`).join("")}</div></div>
+        <div class="picked"><strong>${t("og_" + c.d.game)}</strong><span>${t("og_" + c.d.game + "_d")}</span><button class="btn link" data-act="orules">${t("rules")}</button></div>
+        ${O.games[c.d.game] && O.games[c.d.game].options ? O.options(c, O.games[c.d.game].options) : ""}
+        ${O.options(c, [{ k: "quiz", def: "1", label: () => t("quizMandatory"), choices: () => [["1", t("yes")], ["0", t("no")]] }])}
+        <p class="hint">${t("quizMandatoryHelp")}</p>`
+        : `<p class="lead">${t("gameChosen", { g: t("og_" + c.d.game) })}</p><p class="hint">${c.quizOn ? t("quizModeOn") : t("quizModeOff")}</p><p class="hint">${t("waitHost")}</p>`}
     `, c.isHost ? `<button class="btn primary xl wide" data-act="launch" ${c.online.length >= 2 ? "" : "disabled"}>${c.online.length >= 2 ? t("launch") : t("needTwo")}</button>` : ""), { cls: "game", awake: true });
     SD.bind(app, {
       ...O.baseHandlers(c),
       pickGame: (e, el) => c.update({ game: el.dataset.g }),
       launch: () => c.update({ status: "playing", state: { ...O.games[c.d.game].start(c), gid: Math.random().toString(36).slice(2, 8) } }),
-      opt: (e, el) => c.update({ ["opts/" + el.dataset.k]: el.dataset.v })
+      opt: (e, el) => c.update({ ["opts/" + el.dataset.k]: el.dataset.v }),
+      optm: (e, el) => {
+        const k = el.dataset.k, set = new Set(String(c.opts[k] ?? el.dataset.def).split(",").filter(Boolean));
+        set.has(el.dataset.v) ? set.delete(el.dataset.v) : set.add(el.dataset.v);
+        if (!set.size) return SD.toast(t("pickOne"));
+        c.update({ ["opts/" + k]: [...set].join(",") });
+      }
     });
   };
 
   /* Réglages d'un jeu dans le salon : [{ k, label, choices: [[valeur, texte]], def }] */
   O.options = (c, list) => list.map(o => {
+    if (o.multi) {
+      // Choix multiple (ex. décennies) : valeurs séparées par des virgules
+      const set = new Set(String(c.opts[o.k] ?? o.def).split(",").filter(Boolean));
+      return `<div class="field"><span class="label">${o.label()}</span><div class="chips multi">${o.choices().map(([v, l]) => `<button class="pchip toggle ${set.has(String(v)) ? "on" : ""}" data-act="optm" data-k="${o.k}" data-v="${v}" data-def="${o.def}" aria-pressed="${set.has(String(v))}">${l}</button>`).join("")}</div></div>`;
+    }
     const cur = String(c.opts[o.k] ?? o.def);
     return `<div class="field"><span class="label">${o.label()}</span><div class="seg" role="group">${o.choices().map(([v, l]) => `<button class="${String(v) === cur ? "on" : ""}" data-act="opt" data-k="${o.k}" data-v="${v}" aria-pressed="${String(v) === cur}">${l}</button>`).join("")}</div></div>`;
   }).join("");
@@ -223,9 +245,18 @@
 
   /* ---------- Outils communs aux jeux ---------- */
   O.scoreList = (c, scores, losers = []) => `<div class="result-list">${c.players.slice().sort((a, b) => (scores[b.uid] || 0) - (scores[a.uid] || 0)).map(p => `<div class="rrow ${losers.includes(p.uid) ? "lose" : ""}"><span>${esc(p.name)}</span><b>${scores[p.uid] || 0}</b></div>`).join("")}</div>`;
+  // Ce qui arrive aux perdants : quiz obligatoire (qui peut sauver) ou gorgée directe
+  O.loserBlock = (c, losers) => {
+    if (!losers.length) return "";
+    const qr = c.state.quizRes || {};
+    if (!c.quizOn) return `<p class="lead">${t("mostDrinks", { names: losers.map(u => esc(c.name(u))).join(", ") })}</p>`;
+    const status = u => qr[u] === "ok" ? `<b class="ok">${t("qSaved")}</b>` : qr[u] === "ko" ? `<b class="ko">${t("qDrinks")}</b>` : `<small>${t("qPending")}</small>`;
+    return `<div class="result-list small">${losers.map(u => `<div class="rrow"><span>${esc(c.name(u))}</span>${status(u)}</div>`).join("")}</div>
+      ${losers.includes(c.uid) && !qr[c.uid] ? `<button class="btn primary xl" data-act="myQuiz">${t("myQuizMandatory")}</button>` : ""}`;
+  };
   O.endButtons = (c, losers) => {
-    const meLoses = losers.includes(c.uid);
-    return `${meLoses ? `<button class="btn primary xl" data-act="myQuiz">${t("iDoQuiz")}</button>` : ""}
+    const meLoses = losers.includes(c.uid) && c.quizOn && !(c.state.quizRes || {})[c.uid];
+    return `${O.loserBlock(c, losers)}
       ${c.isHost ? `<button class="btn ${meLoses ? "ghost" : "primary xl"}" data-act="again">${t("again")}</button><button class="btn ghost" data-act="lobbyBack">${t("backLobby")}</button>` : `<p class="hint">${t("waitHost")}</p>`}`;
   };
   O.endHandlers = c => ({ myQuiz: () => c.quiz(c.me.name || t("you")), again: () => c.restart(), lobbyBack: () => c.toLobby() });
@@ -321,18 +352,16 @@
         const counts = {}; Object.values(votes).forEach(u => (counts[u] = (counts[u] || 0) + 1));
         const max = Math.max(0, ...Object.values(counts));
         const losers = Object.keys(counts).filter(u => counts[u] === max);
-        const meLoses = losers.includes(c.uid);
         const app = SD.render(O.frame(c, `
           <p class="eyebrow">${t("question", { i: s.n, n: s.total })}</p>
           <h1 class="display most-prompt">${esc(prompt)}</h1>
           <div class="result-list">${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([u, n]) => `<div class="rrow ${losers.includes(u) ? "lose" : ""}"><span>${esc(c.name(u))}</span><b>${t("votesN", { n })}</b></div>`).join("")}</div>
-          <p class="lead">${t("mostDrinks", { names: losers.map(u => esc(c.name(u))).join(", ") })}</p>
-          ${meLoses ? `<button class="btn primary xl" data-act="myQuiz">${t("iDoQuiz")}</button>` : ""}`,
+          ${O.loserBlock(c, losers)}`,
           c.isHost ? `<button class="btn primary xl wide" data-act="nextP">${s.n >= s.total ? t("seeResults") : t("nextQuestion")}</button>` : ""), { cls: "game", awake: true });
         return SD.bind(app, {
           ...O.baseHandlers(c),
           myQuiz: () => c.quiz(c.me.name || t("you")),
-          nextP: () => s.n >= s.total ? c.setState({ phase: "end" }) : c.setState({ phase: "vote", n: s.n + 1, votes: null })
+          nextP: () => s.n >= s.total ? c.setState({ phase: "end", quizRes: null }) : c.setState({ phase: "vote", n: s.n + 1, votes: null, quizRes: null })
         });
       }
       const mine = votes[c.uid];

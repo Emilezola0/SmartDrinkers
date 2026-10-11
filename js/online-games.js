@@ -316,4 +316,88 @@
       SD.bind(app, { ...O.baseHandlers(c), rev: () => { L.rev = i; c.render(); }, yes: () => mark(true), no: () => mark(false) });
     }
   };
+  /* ================= La roulette du traître ================= */
+  // Un seul barillet partagé : 6 chambres, 1 balle. Chaque tir vide une chambre, donc plus on tire, plus la balle approche.
+  const CHAMBERS = 6;
+  O.games.otraitor = {
+    start: c => {
+      const alive = {}; c.online.forEach(p => (alive[p.uid] = true));
+      return { phase: "choose", round: 1, alive, shield: null, lastShield: null, choices: null, chambers: CHAMBERS, log: null, out: null, quizRes: null };
+    },
+    view: c => {
+      const s = c.state, alive = s.alive || {}, shield = s.shield || {}, choices = s.choices || {}, lastShield = s.lastShield || {};
+      const aliveP = c.players.filter(p => alive[p.uid]);
+      const meAlive = !!alive[c.uid];
+      const shieldIco = u => shield[u] ? ` <span class="shield" title="${t("trShielded")}">${SD.icon("shield")}</span>` : "";
+      if (aliveP.length < 3 && s.round === 1 && s.phase === "choose") {
+        const app = SD.render(O.frame(c, `<h1 class="display">${t("trNeed3")}</h1>`, c.isHost ? `<button class="btn primary xl wide" data-act="lobbyBack">${t("backLobby")}</button>` : ""), { cls: "game" });
+        return SD.bind(app, { ...O.baseHandlers(c), lobbyBack: () => c.toLobby() });
+      }
+      const barrel = `<div class="barrel" aria-label="${t("trBarrel", { n: s.chambers })}">${Array.from({ length: CHAMBERS }, (_, i) => `<span class="${i < CHAMBERS - s.chambers ? "spent" : ""}"></span>`).join("")}</div>
+        <p class="hint tabnum">${t("trBarrel", { n: s.chambers })} · ${t("trChance", { p: Math.round(100 / s.chambers) })}</p>`;
+
+      // Tout le monde a choisi : l'hôte résout les tirs dans un ordre aléatoire
+      const resolve = () => {
+        let chambers = s.chambers, out = null;
+        const log = [], nextShield = {}, newLast = { ...lastShield };
+        const shots = [];
+        aliveP.forEach(p => {
+          const tg = choices[p.uid];
+          if (!tg) return;
+          if (tg === p.uid) { nextShield[p.uid] = true; newLast[p.uid] = s.round; log.push({ f: p.uid, t: p.uid, r: "self" }); }
+          else shots.push({ f: p.uid, t: tg });
+        });
+        SD.shuffle(shots).forEach(sh => {
+          if (out) return log.push({ ...sh, r: "skip" });
+          if (shield[sh.t]) return log.push({ ...sh, r: "blocked" });
+          if (Math.random() < 1 / chambers) { out = sh.t; chambers = CHAMBERS; log.push({ ...sh, r: "bang" }); }
+          else { chambers = Math.max(1, chambers - 1); log.push({ ...sh, r: "click" }); }
+        });
+        const na = { ...alive }; if (out) delete na[out];
+        const left = Object.keys(na);
+        c.setState({ phase: left.length <= 1 ? "end" : "reveal", log, out, chambers, alive: na, nextShield, lastShield: newLast, winner: left.length === 1 ? left[0] : null });
+      };
+      if (s.phase === "choose" && c.isHost && aliveP.length && aliveP.every(p => choices[p.uid])) return resolve();
+
+      if (s.phase === "reveal" || s.phase === "end") {
+        const log = Object.values(s.log || {});
+        const res = r => ({ self: t("trSelf"), skip: t("trSkip"), blocked: t("trBlocked"), click: t("trClick"), bang: t("trBang") })[r];
+        const losers = s.out ? [s.out] : [];
+        const app = SD.render(O.frame(c, `
+          <p class="eyebrow">${t("trRound", { n: s.round })}</p>
+          ${s.out ? `<h1 class="display huge bang">${t("trOut", { name: esc(c.name(s.out)) })}</h1>` : `<h1 class="display">${t("trNobody")}</h1>`}
+          <div class="result-list">${log.map(l => `<div class="rrow ${l.r === "bang" ? "lose" : ""}"><span>${esc(c.name(l.f))}${l.f === l.t ? "" : ` → ${esc(c.name(l.t))}`}</span><b>${res(l.r)}</b></div>`).join("")}</div>
+          ${O.loserBlock(c, losers)}
+          ${s.phase === "end" && s.winner ? `<p class="lead">${t("trWinner", { name: esc(c.name(s.winner)) })}</p>` : ""}
+          ${barrel}`,
+          c.isHost ? (s.phase === "end"
+            ? `<button class="btn primary xl" data-act="again">${t("again")}</button><button class="btn ghost xl" data-act="lobbyBack">${t("backLobby")}</button>`
+            : `<button class="btn primary xl wide" data-act="nextRound">${t("trNext")}</button>`) : ""), { cls: "game", awake: true });
+        if (s.out === c.uid) SD.bad();
+        return SD.bind(app, {
+          ...O.baseHandlers(c), ...O.endHandlers(c),
+          nextRound: () => c.setState({ phase: "choose", round: s.round + 1, choices: null, shield: s.nextShield || null, nextShield: null, log: null, out: null })
+        });
+      }
+
+      // Phase de choix
+      const mine = choices[c.uid];
+      const nChose = aliveP.filter(p => choices[p.uid]).length;
+      const canShield = lastShield[c.uid] !== s.round - 1;
+      const app = SD.render(O.frame(c, `
+        <p class="eyebrow">${t("trRound", { n: s.round })}</p>
+        ${barrel}
+        <div class="player-list">${c.players.map(p => `<span class="pl ${alive[p.uid] ? "" : "off dead"}"><i></i>${esc(p.name)}${shieldIco(p.uid)}</span>`).join("")}</div>
+        ${meAlive ? (mine ? `<p class="lead">${mine === c.uid ? t("trYouShield") : t("trYouAim", { name: esc(c.name(mine)) })}</p><p class="hint">${t("trChangeHint")}</p>` : `<h1 class="display">${t("trChoose")}</h1>`) : `<p class="lead">${t("trSpectator")}</p>`}
+        ${meAlive ? `<div class="vote-grid">${aliveP.filter(p => p.uid !== c.uid).map(p => `<button class="vote ${mine === p.uid ? "on" : ""}" data-act="aim" data-u="${p.uid}">${SD.icon("target")} ${esc(p.name)}${shieldIco(p.uid)}</button>`).join("")}
+          <button class="vote self ${mine === c.uid ? "on" : ""}" data-act="aim" data-u="${c.uid}" ${canShield ? "" : "disabled"}>${SD.icon("shield")} ${canShield ? t("trShieldMe") : t("trShieldNo")}</button></div>` : ""}
+        <p class="hint tabnum">${t("votedCount", { n: nChose, m: aliveP.length })}</p>`,
+        c.isHost ? `<button class="btn ghost xl wide" data-act="force" ${nChose ? "" : "disabled"}>${t("revealNow")}</button>` : ""), { cls: "game", awake: true });
+      SD.bind(app, {
+        ...O.baseHandlers(c),
+        aim: (e, el) => { SD.beep(600, .04); c.setState({ ["choices/" + c.uid]: el.dataset.u }); },
+        force: resolve
+      });
+    }
+  };
 })();
