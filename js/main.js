@@ -29,6 +29,7 @@
       ${topBar()}
       <main class="home">
         <p class="tagline">${t("tagline")}</p>
+        ${SD.isStandalone() ? "" : `<div class="install-card"><div><strong>${t("installTitle")}</strong><span>${t("installPitch")}</span></div><button class="btn primary" data-act="install">${SD.icon("download")} ${t("install")}</button></div>`}
 
         <section class="block" aria-labelledby="hp">
           <h2 id="hp" class="section-title">${t("players")} <span class="count">${p.length}</span></h2>
@@ -85,7 +86,8 @@
       join: () => SD.joinScreen(),
       free: freeQuiz,
       shareApp: () => SD.shareApp(),
-      create: () => SD.createChooser()
+      create: () => SD.createChooser(),
+      install: () => SD.install()
     });
   };
 
@@ -178,7 +180,14 @@
           <form class="join-form" id="urlForm"><input id="urlIn" type="url" placeholder="${t("urlPh")}" autocomplete="off"><button class="btn primary" type="submit">${t("load")}</button></form></div>
         ${SD.isCustomBank ? `<button class="btn ghost" data-act="reset">${t("resetBank")}</button>` : ""}
         <p class="hint">${t("qLangNote")}</p>
-        <p class="footnote">SmartDrinkers · v1.5</p>
+        <h2 class="section-title">${t("appSection")}</h2>
+        <p class="lead small tabnum">${t("versionLine", { v: SD.APP_VERSION })}${SD.remoteVersion && SD.remoteVersion !== SD.APP_VERSION ? " · " + t("onlineVersion", { v: SD.remoteVersion }) : ""}</p>
+        <div class="row-btns">
+          <button class="btn ghost" data-act="checkUpd">${t("checkUpdate")}</button>
+          ${SD.isStandalone() ? "" : `<button class="btn primary" data-act="install">${SD.icon("download")} ${t("install")}</button>`}
+        </div>
+        <p class="hint">${t("offlineNote")}</p>
+        <p class="footnote">SmartDrinkers · v${SD.APP_VERSION}</p>
       </main>`, { cls: "settingscreen" });
 
     const useText = text => {
@@ -214,8 +223,68 @@
       th: (e, el) => { const th = b.themes[+el.dataset.i]; off.has(th) ? off.delete(th) : off.add(th); setOff([...off]); },
       tall: () => setOff([]),
       tnone: () => setOff(b.themes.slice()),
-      reset: () => { SD.save("bankText", null); SD.save("used", []); SD.save("themesOff", []); SD.loadBank(); SD.settings(); }
+      reset: () => { SD.save("bankText", null); SD.save("used", []); SD.save("themesOff", []); SD.loadBank(); SD.settings(); },
+      checkUpd: () => SD.checkUpdate(true),
+      install: () => SD.install()
     });
+  };
+
+  /* ---------- Installation sur l'écran d'accueil ---------- */
+  let deferredInstall = null;
+  SD.isStandalone = () => { try { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; } };
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; });
+  window.addEventListener("appinstalled", () => { deferredInstall = null; SD.toast(t("installed")); });
+  SD.install = async () => {
+    if (deferredInstall) {
+      deferredInstall.prompt();
+      try { await deferredInstall.userChoice; } catch (e) {}
+      deferredInstall = null;
+      return;
+    }
+    const ua = navigator.userAgent || "";
+    const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const steps = ios ? t("installIos") : /Android/.test(ua) ? t("installAndroid") : t("installDesktop");
+    SD.modal(t("installTitle"), `<div class="rules">${SD.nl2p(steps)}<p class="hint">${t("offlineNote")}</p></div>`);
+  };
+
+  /* ---------- Mises à jour ---------- */
+  // Compare deux numéros "1.6.0" : vrai si a est plus récent que b
+  const newer = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+  let swReg = null, waitingWorker = null, lastCheck = 0;
+  const showUpdateBanner = w => {
+    waitingWorker = w;
+    if (document.getElementById("updBanner")) return;
+    const b = document.createElement("div");
+    b.id = "updBanner"; b.className = "upd-banner"; b.setAttribute("role", "status");
+    b.innerHTML = `<span>${t("updateReady")}${SD.remoteVersion ? ` <b>v${esc(SD.remoteVersion)}</b>` : ""}</span><button class="btn primary small" id="updBtn">${t("updateNow")}</button>`;
+    document.body.appendChild(b);
+    b.querySelector("#updBtn").addEventListener("click", () => {
+      b.querySelector("#updBtn").disabled = true;
+      if (waitingWorker) waitingWorker.postMessage("skipWaiting"); else location.reload();
+    });
+  };
+  const watchReg = reg => {
+    swReg = reg;
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) showUpdateBanner(w); });
+    });
+  };
+  SD.checkUpdate = async manual => {
+    if (!manual && Date.now() - lastCheck < 60000) return;
+    lastCheck = Date.now();
+    if (!navigator.onLine) { if (manual) SD.toast(t("offlineNow")); return; }
+    try {
+      const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+      const { version } = await r.json();
+      SD.remoteVersion = version;
+      if (newer(version, SD.APP_VERSION)) {
+        if (swReg) { swReg.update().catch(() => {}); if (manual) SD.toast(t("updateDownloading", { v: version })); }
+        else showUpdateBanner(null);
+      } else if (manual) SD.toast(t("upToDate", { v: SD.APP_VERSION }));
+    } catch (e) { if (manual) SD.toast(t("offlineNow")); }
   };
 
   /* ---------- Démarrage ---------- */
@@ -227,7 +296,14 @@
     if (info) { history.replaceState(null, "", location.pathname + location.search); SD.openCode(info, false); }
     else SD.home();
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading) return; reloading = true; location.reload(); });
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(watchReg).catch(() => {});
+    }
+    if (location.protocol !== "file:") {
+      setTimeout(() => SD.checkUpdate(false), 1500);
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") SD.checkUpdate(false); });
+      window.addEventListener("online", () => SD.checkUpdate(false));
     }
   };
   window.addEventListener("hashchange", () => { const info = SD.parseCode(location.hash); if (info) SD.openCode(info, false); });

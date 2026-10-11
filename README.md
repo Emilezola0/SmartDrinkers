@@ -50,20 +50,36 @@ Format du fichier (`data/questions.tsv`, export TSV de Google Sheets) :
 
 E = facile, M = moyen, H = difficile. Les colonnes `_EN` contiennent la version anglaise (affichée quand l'appli est en anglais) ; si elles sont vides, la question reste en français. On peut ajouter autant de colonnes E3, M3… qu'on veut. Le fichier fourni contient 1 500 questions traduites. Tu peux l'importer tel quel dans Google Sheets (Fichier › Importer). Une précision entre parenthèses longue dans une réponse s'affiche en petit sous la réponse.
 
-- **Pour tout le monde** : remplace `data/questions.tsv`, lance `node outils/maj-questions.js`, change `VERSION` dans `sw.js`, puis remets en ligne.
+- **Pour tout le monde** : remplace `data/questions.tsv`, lance `node outils/maj-questions.js`, puis publie une nouvelle version (voir plus bas).
 - **Juste sur un téléphone** : Réglages › Importer un fichier, ou colle le lien Google Sheets (Fichier › Partager › Publier sur le Web, format TSV).
+
+## Publier une mise à jour
+
+Chaque modification doit changer le numéro de version, sinon les téléphones gardent l'ancienne appli en mémoire :
+
+```
+node outils/release.js          # 1.6.0 → 1.6.1 (correction)
+node outils/release.js minor    # 1.6.0 → 1.7.0 (nouveauté)
+```
+
+Puis Valider + Synchroniser dans VS Code. Le script met à jour `version.json`, `js/version.js` et `sw.js` d'un coup.
+
+Côté joueurs : à l'ouverture (ou au retour dans l'appli), elle lit `version.json` sur le site. Si une version plus récente existe, elle la télécharge et affiche « Nouvelle version disponible › Mettre à jour ». Hors ligne, la version installée continue de marcher. Réglages › Vérifier les mises à jour force la vérification.
 
 ## Structure
 
 ```
 index.html            page de l'appli
 manifest.webmanifest  nom, icônes, couleurs pour l'installation
-sw.js                 mode hors ligne
+sw.js                 mode hors ligne et mises à jour
+version.json          numéro de la version en ligne
 css/style.css         style (thème sombre et clair)
 js/i18n.js            textes FR/EN, catégories de La Bombe, mots de L'Intrus
 js/core.js            état, sons, hasard déterministe, navigation
 js/quiz.js            lecture des questions et déroulé du quiz
-js/games.js           jeux sur 1 téléphone
+js/games.js           jeux sur 1 téléphone (cartes, bombe, réflexe, memory…)
+js/games2.js          421, Le Contrat, Chrono
+js/version.js         numéro de version de l'appli
 js/share.js           code partagé, QR, L'Intrus, Quiz Synchro
 js/main.js            accueil et réglages
 js/lib/               qrcode-generator (MIT), jsQR (Apache 2.0)
