@@ -390,6 +390,31 @@ body[data-screen~="exploded"] { background: var(--bad); }
 .chrono-run span:nth-child(2) { animation-delay: .21s; } .chrono-run span:nth-child(3) { animation-delay: .47s; }
 @keyframes blink { 50% { opacity: .2; } }
 
+/* ---------- En ligne ---------- */
+.online-block .badge { margin: 0 0 0 auto; }
+.spinner { width: 44px; height: 44px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.online-body { justify-content: flex-start; gap: 14px; }
+.qr-box.small { width: min(52vw, 200px); padding: 10px; }
+.room-code { font-size: 1.8rem !important; letter-spacing: .2em; }
+.player-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.pl { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 999px; padding: .4em .9em; font-weight: 800; }
+.pl i { width: 9px; height: 9px; border-radius: 50%; background: var(--good); }
+.pl.off { opacity: .5; } .pl.off i { background: var(--muted); }
+.pl small { color: var(--muted); font-weight: 700; }
+.choose.on { outline: 3px solid var(--accent); }
+.host-off { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); border: 2px solid var(--bad); border-radius: var(--r-sm); padding: 8px 8px 8px 14px; font-weight: 700; font-size: .9rem; }
+.score.locked { opacity: .45; text-decoration: line-through; }
+.buzz-btn {
+  width: min(70vw, 240px); aspect-ratio: 1; border-radius: 50%; border: 0; background: radial-gradient(circle at 35% 30%, #ff9b8f, var(--bad) 60%);
+  color: #fff; font: 400 2.6rem var(--f-display); box-shadow: 0 10px 0 #a3332a, var(--shadow); touch-action: manipulation; margin-top: 6px;
+}
+.buzz-btn:active { transform: translateY(6px); box-shadow: 0 4px 0 #a3332a; }
+.most-prompt { color: var(--accent); max-width: 18ch; }
+.vote-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 420px; }
+.vote { border: 2px solid transparent; border-radius: var(--r-sm); background: var(--surface); padding: 14px 10px; font-weight: 800; font-size: 1.05rem; }
+.vote.on { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+
 /* ---------- Installation & mise à jour ---------- */
 .install-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: var(--r); padding: 14px 14px 14px 16px; }
 .install-card > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

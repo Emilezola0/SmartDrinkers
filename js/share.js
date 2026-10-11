@@ -7,9 +7,12 @@
      QS-XXXXX-10-X-ABC  Quiz Synchro, 10 questions, difficulté X/E/M/H, empreinte de la banque ABC */
   SD.parseCode = raw => {
     let s = String(raw || "").trim();
+    const rm = s.match(/room=([A-Za-z0-9]{4})\b/);
+    if (rm) return { game: "room", code: rm[1].toUpperCase() };
     const m = s.match(/join=([A-Za-z0-9-]+)/);
     if (m) s = m[1];
     s = s.toUpperCase().replace(/\s+/g, "");
+    if (/^[A-Z0-9]{4}$/.test(s)) return { game: "room", code: s };
     const p = s.split("-");
     if (p[0] === "IN" && p.length === 3 && SD.SEED_RE.test(p[1])) {
       const n = +p[2]; if (n >= 3 && n <= 12) return { game: "intrus", seed: p[1], n, code: s };
@@ -27,6 +30,7 @@
   };
 
   SD.openCode = (info, asHost) => {
+    if (info.game === "room") return SD.online && SD.online.joinFlow(info.code);
     if (info.game === "intrus") intrusPick(info);
     else if (info.game === "sync") syncPlay(info, asHost);
   };

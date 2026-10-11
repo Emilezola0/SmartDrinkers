@@ -53,6 +53,10 @@ E = facile, M = moyen, H = difficile. Les colonnes `_EN` contiennent la version 
 - **Pour tout le monde** : remplace `data/questions.tsv`, lance `node outils/maj-questions.js`, puis publie une nouvelle version (voir plus bas).
 - **Juste sur un téléphone** : Réglages › Importer un fichier, ou colle le lien Google Sheets (Fichier › Partager › Publier sur le Web, format TSV).
 
+## Mode en ligne (Firebase)
+
+Les salons utilisent Firebase Realtime Database (projet `smartdrinkers`). La configuration est en haut de `js/online.js`. Chaque salon est stocké sous `rooms/<CODE>` : l'hôte arbitre la partie, les autres envoient leurs actions (buzz, votes). Ajouter un jeu en ligne : ajouter un objet `O.games.<id> = { start, view }` dans `js/online.js` et ses textes `og_<id>`, `og_<id>_d`, `og_<id>_r`.
+
 ## Publier une mise à jour
 
 Chaque modification doit changer le numéro de version, sinon les téléphones gardent l'ancienne appli en mémoire :
@@ -81,8 +85,9 @@ js/games.js           jeux sur 1 téléphone (cartes, bombe, réflexe, memory…
 js/games2.js          421, Le Contrat, Chrono
 js/version.js         numéro de version de l'appli
 js/share.js           code partagé, QR, L'Intrus, Quiz Synchro
+js/online.js          mode en ligne : salons hôte/joueurs (Firebase), Buzzer Quiz, Le plus susceptible de…
 js/main.js            accueil et réglages
-js/lib/               qrcode-generator (MIT), jsQR (Apache 2.0)
+js/lib/               qrcode-generator (MIT), jsQR (Apache 2.0), firebase/ (SDK Firebase, Apache 2.0)
 data/                 questions
 icons/                icônes de l'appli
 ```

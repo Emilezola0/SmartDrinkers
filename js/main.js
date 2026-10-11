@@ -23,6 +23,7 @@
     </div>`;
 
   SD.home = () => {
+    if (SD.online && SD.online.room) SD.online.leave(true); // revenir à l'accueil = quitter le salon en ligne
     const p = SD.players();
     const one = SD.GAMES.filter(g => g.mode === "one"), each = SD.GAMES.filter(g => g.mode === "each");
     const app = SD.render(`
@@ -56,6 +57,7 @@
           <div class="game-grid">${each.map(gameCard).join("")}</div>
           <p class="hint">${t("holdHint")}</p>
         </section>
+        ${SD.online ? SD.online.homeHtml() : ""}
 
         <div class="quick">
           <button class="btn ghost xl" data-act="free">${SD.icon("glass")} ${t("freeQuiz")}</button>
@@ -87,7 +89,8 @@
       free: freeQuiz,
       shareApp: () => SD.shareApp(),
       create: () => SD.createChooser(),
-      install: () => SD.install()
+      install: () => SD.install(),
+      ...(SD.online ? SD.online.homeHandlers() : {})
     });
   };
 
@@ -296,8 +299,10 @@
     if (info) { history.replaceState(null, "", location.pathname + location.search); SD.openCode(info, false); }
     else SD.home();
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      // Recharger seulement quand une nouvelle version remplace l'ancienne (pas à la toute première installation)
       let reloading = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading) return; reloading = true; location.reload(); });
+      const hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading || !hadController) return; reloading = true; location.reload(); });
       navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(watchReg).catch(() => {});
     }
     if (location.protocol !== "file:") {

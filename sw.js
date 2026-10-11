@@ -1,10 +1,10 @@
 /* SmartDrinkers — service worker : l'appli marche hors connexion une fois ouverte.
    VERSION est mise à jour automatiquement par « node outils/release.js ». */
-const VERSION = "sd-v1.6.1";
+const VERSION = "sd-v1.7.0";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/lib/qrcode.js", "js/lib/jsQR.js", "data/questions.js", "js/version.js",
-  "js/i18n.js", "js/core.js", "js/quiz.js", "js/games.js", "js/games2.js", "js/share.js", "js/main.js",
+  "js/i18n.js", "js/core.js", "js/quiz.js", "js/games.js", "js/games2.js", "js/share.js", "js/online.js", "js/main.js",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"
 ];
 
