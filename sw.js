@@ -1,6 +1,6 @@
 /* SmartDrinkers — service worker : l'appli marche hors connexion une fois ouverte.
    VERSION est mise à jour automatiquement par « node outils/release.js ». */
-const VERSION = "sd-v1.6.0";
+const VERSION = "sd-v1.6.1";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/style.css",
   "js/lib/qrcode.js", "js/lib/jsQR.js", "data/questions.js", "js/version.js",

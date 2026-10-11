@@ -291,6 +291,8 @@ body[data-screen~="exploded"] { background: var(--bad); }
   transition: transform .08s ease;
 }
 .diff-btn:active { transform: scale(.98); }
+.diff-btn.used { opacity: .35; filter: grayscale(1); cursor: not-allowed; }
+.diff-btn.used .dn { text-decoration: line-through; }
 .diff-btn .dn { font: 400 1.6rem var(--f-display); color: var(--dc); }
 .diff-btn .dc { color: var(--muted); font-weight: 800; font-size: .9rem; }
 .result.is-good .display { color: var(--good); }

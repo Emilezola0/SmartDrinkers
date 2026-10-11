@@ -136,20 +136,33 @@
       SD.bind(app, { cont: () => opts.onContinue(), home: () => SD.home() });
     };
 
+    // Difficultés déjà choisies par chaque joueur : grisées jusqu'à ce que les trois aient été prises
+    const usedDiffs = name => { const all = SD.load("diffUsed", {}); return all[name] || []; };
+    const markDiff = (name, d) => {
+      const all = SD.load("diffUsed", {});
+      let list = (all[name] || []).filter(x => x !== d).concat(d);
+      if (list.length >= 3) list = []; // les trois faites : tout redevient disponible
+      all[name] = list; SD.save("diffUsed", all);
+    };
     const chooseDiff = () => {
       const name = names[i];
       const s = SD.state.sips;
+      const used = usedDiffs(name);
       const app = SD.render(`
         <header class="game-top"><button class="icon-btn" data-act="home" aria-label="${t("menu")}">${SD.icon("back")}</button>
           <span class="eyebrow">${t("quizTime")}${names.length > 1 ? ` · ${i + 1}/${names.length}` : ""}</span><span></span></header>
         <div class="center-stack">
           <h1 class="display name-title">${t("chooseDiff", { name: `<span class="hl">${esc(name)}</span>` })}</h1>
           <div class="diff-grid">
-            ${["E", "M", "H"].map(d => `<button class="diff-btn ${SD.diffClass(d)}" data-act="d${d}">
-              <span class="dn">${SD.diffName(d)}</span><span class="dc">${t("missCost", { n: s[d] })} ${SD.sipWord(s[d])}</span></button>`).join("")}
+            ${["E", "M", "H"].map(d => used.includes(d)
+              ? `<button class="diff-btn ${SD.diffClass(d)} used" disabled aria-disabled="true">
+                  <span class="dn">${SD.diffName(d)}</span><span class="dc">${t("diffUsed")}</span></button>`
+              : `<button class="diff-btn ${SD.diffClass(d)}" data-act="d${d}">
+                  <span class="dn">${SD.diffName(d)}</span><span class="dc">${t("missCost", { n: s[d] })} ${SD.sipWord(s[d])}</span></button>`).join("")}
           </div>
+          ${used.length ? `<p class="hint">${t("diffUsedHint")}</p>` : ""}
         </div>`, { cls: "quiz", awake: true });
-      const go = d => () => ask(d);
+      const go = d => () => { markDiff(name, d); ask(d); };
       SD.bind(app, { home: () => SD.home(), dE: go("E"), dM: go("M"), dH: go("H") });
     };
 
