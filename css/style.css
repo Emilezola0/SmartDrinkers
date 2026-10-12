@@ -114,12 +114,12 @@ button.pchip { padding: .5em 1em; }
 .pickable .pchip.on, .pchip.toggle.on { background: var(--accent); color: var(--accent-ink); }
 .pchip.toggle:not(.on) { background: transparent; border-color: var(--line); color: var(--muted); }
 
-.add-form, .join-form { display: flex; gap: 8px; }
-.add-form input, .join-form input, .field input[type=url] {
+.add-form, .join-form, .word-entry { display: flex; gap: 8px; }
+.add-form input, .join-form input, .word-entry input, .field input[type=url] {
   flex: 1; min-width: 0; background: var(--bg-2); border: 2px solid var(--line); border-radius: 999px;
   padding: .7em 1.1em; font-weight: 700;
 }
-.add-form input:focus, .join-form input:focus { border-color: var(--accent); outline: none; }
+.add-form input:focus, .join-form input:focus, .word-entry input:focus { border-color: var(--accent); outline: none; }
 
 .game-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .gcard { position: relative; }
@@ -513,3 +513,15 @@ body[data-screen~="exploded"] { background: var(--bad); }
 
 @media (max-width: 360px) { .game-grid, .quick, .multi-row { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Bombe à l'écrit + fenêtres de confirmation */
+.word-entry { width: 100%; max-width: 420px; }
+.word-entry input { font-size: 1.1rem; }
+.chips.used-words { justify-content: center; max-width: 420px; }
+.chips.used-words .chip { text-transform: none; letter-spacing: 0; font-size: .85rem; }
+.refile-wr { width: 100%; max-width: 420px; text-align: center; }
+.refile-wr summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: .4em; }
+.refile-wr[open] summary { color: var(--bad, var(--accent)); }
+.confirm-text { text-align: center; margin-bottom: 1em; }
+.confirm-btns { width: 100%; max-width: 360px; margin: 0 auto; }
+.confirm-btns .btn { width: 100%; }

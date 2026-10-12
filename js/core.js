@@ -142,6 +142,18 @@
     requestAnimationFrame(() => m.classList.add("open"));
   };
   SD.closeModal = () => { const m = document.getElementById("modal"); if (m) m.remove(); };
+  // Fenêtre Oui / Non. Fermer la fenêtre (croix, fond) compte comme Non.
+  SD.confirm = ({ title, text, yes, no, danger }) => new Promise(res => {
+    SD.modal(title, `<p class="lead confirm-text">${text}</p>
+      <div class="btn-col center confirm-btns"><button class="btn ${danger ? "bad" : "primary"} xl" data-c="yes">${yes}</button><button class="btn ghost xl" data-c="no">${no}</button></div>`);
+    const m = document.getElementById("modal");
+    let done = false;
+    const finish = v => { if (done) return; done = true; SD.closeModal(); res(v); };
+    m.addEventListener("click", e => {
+      if (e.target.closest("[data-c=yes]")) return finish(true);
+      if (e.target.closest("[data-c=no]") || e.target === m || e.target.closest("[data-close]")) finish(false);
+    });
+  });
 
   SD.toast = msg => {
     let el = document.getElementById("toast");

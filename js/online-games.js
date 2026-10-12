@@ -170,19 +170,40 @@
     const tiles = pr.letters.split("").map(ch => `<span class="tile">${esc(ch)}</span>`).join("") + (pr.len ? `<span class="tile empty"></span>`.repeat(Math.max(0, pr.len - pr.letters.length)) : `<span class="tile more">…</span>`);
     return `<div class="tiles big">${tiles}</div><p class="prompt-sub">${pr.len ? t("bombExact", { n: pr.len }) : t("bombStarts")}</p>`;
   };
+  // Mode écrit : mots normalisés (minuscules, sans accents, lettres seules)
+  const normWord = w => String(w || "").toLowerCase().replace(/œ/g, "oe").replace(/æ/g, "ae").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
+  const wordCache = {};
+  // Vérifie qu'un mot existe sur le Wiktionnaire (si le réseau ne répond pas, on accepte le mot)
+  const wordExists = (word, lang) => {
+    const key = lang + ":" + normWord(word);
+    if (wordCache[key] != null) return Promise.resolve(wordCache[key]);
+    const url = `https://${lang === "en" ? "en" : "fr"}.wiktionary.org/w/api.php?action=opensearch&format=json&origin=*&limit=20&namespace=0&search=${encodeURIComponent(word.trim())}`;
+    const ctrl = window.AbortController ? new AbortController() : null;
+    const to = setTimeout(() => ctrl && ctrl.abort(), 5000);
+    return fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(r => r.json()).then(j => {
+      const n = normWord(word);
+      const ok = (j[1] || []).some(title => normWord(title) === n);
+      return (wordCache[key] = ok);
+    }).catch(() => true).finally(() => clearTimeout(to));
+  };
   O.games.obomb = {
-    options: [{ k: "bomb", def: "letters", label: () => t("ctMode"), choices: () => [["letters", t("bombModeLetters")], ["exact", t("bombModeExact")], ["cat", t("bombModeCat")]] }],
+    options: [
+      { k: "bomb", def: "letters", label: () => t("ctMode"), choices: () => [["letters", t("bombModeLetters")], ["exact", t("bombModeExact")], ["cat", t("bombModeCat")]] },
+      { k: "answer", def: "oral", label: () => t("bombAnswer"), choices: () => [["oral", t("bombOral")], ["write", t("bombWrite")]] }
+    ],
     start: c => {
       const mode = O.opt(c, "bomb", "letters");
       const first = SD.pick(c.online).uid;
-      return { phase: "run", mode, holder: first, prompt: bombPrompt(mode), ends: c.now() + 25000 + Math.floor(Math.random() * 30000), refile: null, loser: null };
+      return { phase: "run", mode, write: O.opt(c, "answer", "oral") === "write", holder: first, said: null, words: null, prompt: bombPrompt(mode), ends: c.now() + 25000 + Math.floor(Math.random() * 30000), refile: null, loser: null, dup: null };
     },
     view: c => {
       const s = c.state;
+      const words = s.words || {};
+      const usedHtml = () => s.write && Object.keys(words).length ? `<p class="eyebrow">${t("bombUsed")}</p><div class="chips used-words">${Object.values(words).map(w => `<span class="chip">${esc(w)}</span>`).join("")}</div>` : "";
       if (s.phase === "boom") {
         const losers = [s.loser];
         const L = c.local(); if (!L.boomed) { L.boomed = true; SD.boomSound(); SD.buzz([400, 100, 400]); }
-        const app = SD.render(O.frame(c, `<h1 class="display mega">${s.refiled ? t("refiled") : t("boom")}</h1>${loserText(c, losers)}<div class="btn-col">${O.endButtons(c, losers)}</div>`), { cls: "game exploded", awake: true });
+        const app = SD.render(O.frame(c, `<h1 class="display mega">${s.refiled ? t("refiled") : t("boom")}</h1>${s.dup ? `<p class="lead">${t("bombDup", { w: esc(s.dup) })}</p>` : ""}${loserText(c, losers)}<div class="btn-col">${O.endButtons(c, losers)}</div>`), { cls: "game exploded", awake: true });
         return SD.bind(app, { ...O.baseHandlers(c), ...O.endHandlers(c) });
       }
       const me = s.holder === c.uid;
@@ -193,35 +214,85 @@
       else timer = setTimeout(() => { if (c.isHost) c.setState({ phase: "boom", loser: (O.room.data.state || {}).holder }); }, left + 300);
       const others = c.online.filter(p => p.uid !== c.uid);
       const rf = s.refile;
+      const L = c.local();
+      const inputHtml = () => `<div class="word-entry"><input id="bombWord" class="input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30" placeholder="${t("bombType")}" value="${esc(L.draft || "")}" ${L.checking ? "disabled" : ""}>
+        <button class="btn primary" data-act="sendWord" ${L.checking ? "disabled" : ""}>${L.checking ? t("bombChecking") : t("bombCheck")}</button></div>`;
+      const needWord = s.write && s.said !== c.uid;
       let body, actions = "";
       if (rf && rf.to === c.uid) {
-        body = `${promptHtml(s.prompt)}<p class="lead">${t("refileAsk", { a: `<strong>${esc(c.name(rf.from))}</strong>`, b: `<strong>${esc(c.me.name || "")}</strong>` })}</p>`;
-        actions = `<button class="btn bad xl" data-act="rfNo">${t("refileNo")}</button><button class="btn good xl" data-act="rfYes">${t("refileYes")}</button>`;
+        if (s.write) {
+          body = `${promptHtml(s.prompt)}<p class="lead">${t("refileWrite", { a: `<strong>${esc(c.name(rf.from))}</strong>` })}</p>${inputHtml()}${usedHtml()}`;
+          actions = `<button class="btn bad xl" data-act="rfNo">${t("bombGiveUp")}</button>`;
+        } else {
+          body = `${promptHtml(s.prompt)}<p class="lead">${t("refileAsk", { a: `<strong>${esc(c.name(rf.from))}</strong>`, b: `<strong>${esc(c.me.name || "")}</strong>` })}</p>`;
+          actions = `<button class="btn bad xl" data-act="rfNo">${t("refileNo")}</button><button class="btn good xl" data-act="rfYes">${t("refileYes")}</button>`;
+        }
       } else if (me && !rf) {
-        body = `${promptHtml(s.prompt)}<div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>
-          <p class="eyebrow">${t("throwTo")}</p>
-          <div class="vote-grid">${others.map(p => `<button class="vote" data-act="throw" data-u="${p.uid}">${esc(p.name)}</button>`).join("")}</div>
-          <label class="check"><input type="checkbox" id="rfMode"> ${t("refileMode")}</label>`;
+        const refileBox = `<label class="check"><input type="checkbox" id="rfMode"> ${t("refileMode")}</label>`;
+        const throwGrid = `<div class="vote-grid">${others.map(p => `<button class="vote" data-act="throw" data-u="${p.uid}">${esc(p.name)}</button>`).join("")}</div>`;
+        if (needWord) {
+          // À l'écrit : il faut d'abord un mot valide… ou refiler sans mot
+          body = `${promptHtml(s.prompt)}<div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>${inputHtml()}
+            <details class="refile-wr"><summary>${t("refile")}</summary><p class="eyebrow">${t("throwTo")}</p>${throwGrid.replace(/data-act="throw"/g, 'data-act="throwRf"')}</details>${usedHtml()}`;
+        } else {
+          body = `${promptHtml(s.prompt)}<div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>
+            <p class="eyebrow">${s.write ? t("bombOk") : t("throwTo")}</p>${throwGrid}${s.write ? "" : refileBox}${usedHtml()}`;
+        }
       } else {
         body = `${promptHtml(s.prompt)}<p class="eyebrow">${t("holder")}</p><h1 class="display huge">${esc(c.name(rf ? rf.to : s.holder))}</h1>
-          <div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>${rf ? `<p class="hint">${t("refileWait", { a: esc(c.name(rf.from)) })}</p>` : ""}`;
+          <div class="bomb lit" aria-hidden="true"><span class="fuse"></span></div>${rf ? `<p class="hint">${t("refileWait", { a: esc(c.name(rf.from)) })}</p>` : ""}${usedHtml()}`;
       }
       const app = SD.render(O.frame(c, body, actions), { cls: "game", awake: true });
+      const inp = app.querySelector("#bombWord");
+      if (inp) {
+        inp.addEventListener("input", () => (L.draft = inp.value));
+        inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+        if (!L.checking && L.focus !== false) { inp.focus({ preventScroll: true }); const n = inp.value.length; try { inp.setSelectionRange(n, n); } catch (e) {} }
+      }
       if (me || (rf && rf.to === c.uid)) {
         const loop = () => { const l = s.ends - c.now(); if (l <= 0) return; SD.beep(l < 6000 ? 1100 : 880, .04, "square", .08); SD.buzz(15); tick = setTimeout(loop, Math.max(150, Math.min(900, l / 12))); };
         loop();
       }
       SD.cleanup = () => { clearTimeout(timer); clearTimeout(tick); };
+      // Validation d'un mot écrit
+      async function submit() {
+        if (L.checking) return;
+        const raw = (L.draft || "").trim(), n = normWord(raw);
+        if (n.length < 2) return SD.toast(t("bombType"));
+        const pr = s.prompt || {};
+        if (pr.letters) {
+          const need = normWord(pr.letters);
+          if (!n.startsWith(need) || n === need) { SD.bad(); return SD.toast(t("bombBadStart", { l: pr.letters.toUpperCase() })); }
+          if (pr.len && n.length !== pr.len) { SD.bad(); return SD.toast(t("bombBadLen", { n: pr.len })); }
+        }
+        const cur = O.room.data.state || {};
+        if ((cur.words || {})[n]) { L.draft = ""; return c.setState({ phase: "boom", loser: c.uid, dup: raw, refiled: false }); }
+        if (pr.letters) {
+          L.checking = true; c.render();
+          const ok = await wordExists(raw, SD.state.lang);
+          L.checking = false;
+          const now = O.room.data.state || {};
+          if (now.phase !== "run" || now.gid !== cur.gid) return;
+          if (!ok) { SD.bad(); SD.toast(t("bombUnknown", { w: raw })); return c.render(); }
+          if ((now.words || {})[n]) { L.draft = ""; return c.setState({ phase: "boom", loser: c.uid, dup: raw, refiled: false }); }
+        }
+        L.draft = ""; SD.good();
+        const r = (O.room.data.state || {}).refile;
+        if (r && r.to === c.uid) c.setState({ ["words/" + n]: raw, phase: "boom", loser: r.from, refiled: true });
+        else c.setState({ ["words/" + n]: raw, said: c.uid });
+      }
       SD.bind(app, {
         ...O.baseHandlers(c),
+        sendWord: () => submit(),
         throw: (e, el) => {
           const refile = app.querySelector("#rfMode") && app.querySelector("#rfMode").checked;
           SD.beep(500, .05);
           if (refile) c.setState({ refile: { from: c.uid, to: el.dataset.u } });
-          else c.setState({ holder: el.dataset.u });
+          else c.setState({ holder: el.dataset.u, said: null });
         },
+        throwRf: (e, el) => { SD.beep(500, .05); L.draft = ""; c.setState({ refile: { from: c.uid, to: el.dataset.u } }); },
         rfYes: () => c.setState({ phase: "boom", loser: rf.from, refiled: true }),
-        rfNo: () => c.setState({ holder: c.uid, refile: null, prompt: bombPrompt(s.mode) })
+        rfNo: () => { L.draft = ""; c.setState({ holder: c.uid, said: null, refile: null, words: null, prompt: bombPrompt(s.mode) }); }
       });
     }
   };

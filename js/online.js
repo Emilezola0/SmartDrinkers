@@ -188,7 +188,18 @@
     return `<div class="host-off"><span>${t("hostOffline", { name: esc(host.name) })}</span><button class="btn small primary" data-act="takeHost">${t("takeHost")}</button></div>`;
   };
   O.baseHandlers = c => ({
-    leave: () => { O.leave(true); SD.home(); },
+    // Flèche retour : en partie, retour au salon (hôte) ; dans le salon, quitter la session. Toujours avec confirmation.
+    leave: async () => {
+      const hostName = esc(c.name(c.d.host));
+      if (c.d.status === "playing") {
+        if (c.isHost) {
+          if (await SD.confirm({ title: t("backLobbyQ"), text: t("backLobbyText"), yes: t("yes"), no: t("no") })) c.toLobby();
+        } else if (await SD.confirm({ title: t("leaveRoomQ"), text: t("onlyHostStops", { name: hostName }) + " " + t("leaveRoomText"), yes: t("leaveRoom"), no: t("cancel"), danger: true })) { O.leave(true); SD.home(); }
+        return;
+      }
+      const text = c.isHost ? t("leaveRoomHostText") : t("leaveRoomText");
+      if (await SD.confirm({ title: t("leaveRoomQ"), text, yes: t("leaveRoom"), no: t("cancel"), danger: true })) { O.leave(true); SD.home(); }
+    },
     orules: () => SD.modal(t("og_" + c.d.game), `<div class="rules">${SD.nl2p(t("og_" + c.d.game + "_r"))}</div>`),
     takeHost: () => c.update({ host: c.uid })
   });
